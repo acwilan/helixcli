@@ -7,6 +7,7 @@ struct HelixCLI: ParsableCommand {
         abstract: "Control Line 6 HX Stomp via USB",
         version: "0.1.0",
         subcommands: [
+            DeviceCommand.self,
             PresetCommand.self,
             SnapshotCommand.self,
             BlockCommand.self,
