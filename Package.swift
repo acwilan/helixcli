@@ -22,6 +22,17 @@ let package = Package(
             name: "helixcli",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "Clibusb",
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-L/opt/homebrew/lib"]),
+            ]
+        ),
+        .systemLibrary(
+            name: "Clibusb",
+            pkgConfig: "libusb-1.0",
+            providers: [
+                .brew(["libusb"]),
             ]
         ),
     ]
