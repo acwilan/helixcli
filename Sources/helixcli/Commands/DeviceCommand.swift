@@ -15,6 +15,7 @@ struct DeviceCommand: ParsableCommand {
             DeviceReset.self,
             DeviceSendRaw.self,
             DevicePresetNames.self,
+            DeviceCurrentName.self,
         ]
     )
 }
@@ -35,6 +36,31 @@ struct ListDevices: ParsableCommand {
             "count": devices.count,
             "devices": devices.map(\ .dictionary),
         ]).toJSON())
+    }
+}
+
+struct DeviceCurrentName: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "current-name",
+        abstract: "Diagnostic: connect, reconfigure, and request current preset name"
+    )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets per handshake phase")
+    var maxPackets: Int = 120
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets, requestCurrentPresetName: true)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }
 

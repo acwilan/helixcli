@@ -51,11 +51,25 @@ struct CurrentPreset: ParsableCommand {
         abstract: "Get current preset"
     )
     
-    func run() {
-        let response = JSONResponse.success(data: [
-            "message": "Getting current preset - not yet implemented"
-        ])
-        print(response.toJSON())
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets per handshake phase")
+    var maxPackets: Int = 120
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets, requestCurrentPresetName: true)
+            print(JSONResponse.success(data: [
+                "connected": result["connected"] as? Bool ?? false,
+                "currentPresetName": result["currentPresetName"] as Any,
+            ]).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }
 

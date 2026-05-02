@@ -246,7 +246,7 @@ final class USBManager {
         ]
     }
 
-    func connectHandshake(timeoutMs: UInt32 = 200, maxPackets: Int = 80, requestPresetNames: Bool = false) throws -> [String: Any] {
+    func connectHandshake(timeoutMs: UInt32 = 200, maxPackets: Int = 80, requestPresetNames: Bool = false, requestCurrentPresetName: Bool = false) throws -> [String: Any] {
         try withProtocolHandle { handle in
             var x1: UInt8 = 0x02
             var x2: UInt8 = 0x02
@@ -426,8 +426,9 @@ final class USBManager {
             var reconfiguredX1 = false
             var presetNamePackets: [Data] = []
             var presetNameReadTimeouts = 0
+            var currentPresetName: String? = nil
 
-            if receivedX2 && receivedX80 && requestPresetNames {
+            if receivedX2 && receivedX80 && (requestPresetNames || requestCurrentPresetName) {
                 // Python's next mode reconfigures stream x1 and resets its sequence counter.
                 x1 = 0x02
                 try write("reconfigure-x1-start", [0x0c,0x00,0x00,0x28,0x01,0x10,0xef,0x03,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x21,0x00,0x10,0x00,0x00])
@@ -445,7 +446,28 @@ final class USBManager {
                     if reconfiguredX1 { break }
                 }
 
-                if reconfiguredX1 {
+                if reconfiguredX1 && requestCurrentPresetName {
+                    var currentPresetPayload: [UInt8] = []
+                    var timeouts = 0
+                    try write("request-current-preset-name", [0x19,0x00,0x00,0x18,0x80,0x10,0xed,0x03,0x00,-1,0x00,0x04,0x1a,0x1e,0x00,0x00,0x01,0x00,0x06,0x00,0x09,0x00,0x00,0x00,0x83,0x66,0xcd,0x04,0x04,0x64,0x17,0x65,0xc0,0x00,0x00,0x00])
+
+                    while timeouts < 4 && currentPresetName == nil {
+                        let frames = readFrames()
+                        if frames.isEmpty {
+                            timeouts += 1
+                            continue
+                        }
+                        timeouts = 0
+                        for packet in frames {
+                            currentPresetPayload.append(contentsOf: packet.dropFirst(min(16, packet.count)))
+                            if currentPresetName == nil {
+                                currentPresetName = HelixResponseParser.parseCurrentPresetName(from: Data(currentPresetPayload))
+                            }
+                        }
+                    }
+                }
+
+                if reconfiguredX1 && requestPresetNames {
                     try write("request-preset-names", [0x1d,0x00,0x00,0x18,0x01,0x10,0xef,0x03,0x00,-1,0x00,0x0c,0x38,0x10,0x00,0x00,0x01,0x00,0x02,0x00,0x0d,0x00,0x00,0x00,0x83,0x66,0xcd,0x03,0xea,0x64,0x01,0x65,0x82,0x6b,0x00,0x65,0x02,0x00,0x00,0x00])
 
                     while presetNameReadTimeouts < 4 && presetNamePackets.count < 180 {
@@ -486,6 +508,7 @@ final class USBManager {
                 "reconfiguredX1": reconfiguredX1,
                 "presetNamePacketCount": presetNamePackets.count,
                 "decodedPresetNameCount": namedPresets.count,
+                "currentPresetName": currentPresetName as Any,
                 "presetNames": presets.prefix(125).map { ["id": $0.id, "name": $0.name, "bank": $0.bank] },
                 "traceCount": trace.count,
                 "trace": trace,

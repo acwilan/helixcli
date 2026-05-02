@@ -84,6 +84,41 @@ struct HelixSequenceState {
 
 /// Parsers for response payloads from HX Stomp.
 struct HelixResponseParser {
+    static func parseCurrentPresetName(from data: Data) -> String? {
+        let bytes = Array(data)
+        let pattern: [UInt8] = [0x83, 0x66, 0xcd, 0x04, 0x04]
+        let searchStart: Int
+        if let marker = find(pattern, in: bytes, startingAt: 0) {
+            searchStart = marker + pattern.count
+        } else {
+            // Fallback for the observed response shape in the Python reference:
+            // payload has metadata before a 24-byte ASCII name around offset 27.
+            guard bytes.count > 51 else { return nil }
+            return decodeASCIIName(Array(bytes[27..<min(bytes.count, 51)]))
+        }
+
+        guard searchStart < bytes.count else { return nil }
+        let tail = Array(bytes[searchStart...])
+
+        // Current-preset response observed live:
+        //   ... 83 66 cd 04 04 67 00 68 86 6b cd 00 00 6c cd 00 01 6d aa <ASCII name> 00 ...
+        // The 0x6d tag precedes a length-ish byte, then the null-terminated name.
+        for idx in 0..<max(0, min(tail.count - 2, 48)) where tail[idx] == 0x6d {
+            if let candidate = decodeASCIIName(Array(tail.dropFirst(idx + 2).prefix(24))), candidate.count >= 2 {
+                return candidate
+            }
+        }
+
+        // Last-resort scan for a readable null-terminated ASCII run.
+        for offset in 0..<min(tail.count, 48) {
+            let candidate = decodeASCIIName(Array(tail.dropFirst(offset).prefix(24)))
+            if let candidate, candidate.count >= 4, candidate.range(of: #"^[A-Za-z0-9].*"#, options: .regularExpression) != nil {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     static func parsePresetNames(from packets: [Data], expectedCount: Int = 125) -> [Preset] {
         // Preset-name records can be split across USB reads, and libusb may also
         // concatenate multiple protocol frames in one read. Scan the continuous byte
@@ -120,6 +155,12 @@ struct HelixResponseParser {
             }()
             return Preset(id: presetId, name: name, bank: "User")
         }
+    }
+
+    private static func decodeASCIIName(_ bytes: [UInt8]) -> String? {
+        let nameBytes = bytes.prefix { $0 != 0x00 }.map { (32...126).contains($0) ? $0 : UInt8(ascii: "?") }
+        guard !nameBytes.isEmpty else { return nil }
+        return String(bytes: nameBytes, encoding: .ascii)
     }
 
     private static func find(_ pattern: [UInt8], in bytes: [UInt8], startingAt start: Int) -> Int? {
