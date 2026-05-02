@@ -20,12 +20,28 @@ struct ListPresets: ParsableCommand {
         abstract: "List all presets"
     )
     
-    func run() {
-        let response = JSONResponse.success(data: [
-            "message": "Listing presets - not yet implemented",
-            "presets": []
-        ])
-        print(response.toJSON())
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets per handshake phase")
+    var maxPackets: Int = 120
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets, requestPresetNames: true)
+            let presets = result["presetNames"] as? [[String: Any]] ?? []
+            print(JSONResponse.success(data: [
+                "count": presets.count,
+                "decodedPresetNameCount": result["decodedPresetNameCount"] as? Int ?? 0,
+                "connected": result["connected"] as? Bool ?? false,
+                "presets": presets,
+            ]).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }
 

@@ -85,7 +85,11 @@ struct HelixSequenceState {
 /// Parsers for response payloads from HX Stomp.
 struct HelixResponseParser {
     static func parsePresetNames(from packets: [Data], expectedCount: Int = 125) -> [Preset] {
-        let stream = packets.flatMap { Array($0.dropFirst(min(16, $0.count))) }
+        // Preset-name records can be split across USB reads, and libusb may also
+        // concatenate multiple protocol frames in one read. Scan the continuous byte
+        // stream directly instead of assuming each Data starts with exactly one
+        // 16-byte protocol header.
+        let stream = packets.flatMap { Array($0) }
         let pattern: [UInt8] = [0x81, 0xcd, 0x00]
         let recordLength = 25
         var presetsByIndex: [Int: String] = [:]

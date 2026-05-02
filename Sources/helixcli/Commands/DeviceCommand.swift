@@ -11,6 +11,10 @@ struct DeviceCommand: ParsableCommand {
             DeviceTopology.self,
             DeviceProbe.self,
             DevicePing.self,
+            DeviceConnect.self,
+            DeviceReset.self,
+            DeviceSendRaw.self,
+            DevicePresetNames.self,
         ]
     )
 }
@@ -31,6 +35,104 @@ struct ListDevices: ParsableCommand {
             "count": devices.count,
             "devices": devices.map(\ .dictionary),
         ]).toJSON())
+    }
+}
+
+struct DevicePresetNames: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "preset-names",
+        abstract: "Connect, reconfigure, request, and decode preset names"
+    )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets per handshake phase")
+    var maxPackets: Int = 120
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets, requestPresetNames: true)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
+struct DeviceSendRaw: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "send-raw",
+        abstract: "Send one raw hex packet to endpoint 0x01 and read responses from 0x81"
+    )
+
+    @Argument(help: "Hex bytes, e.g. '0c 00 00 28 ...'")
+    var hex: String
+
+    @Option(help: "USB transfer timeout in milliseconds")
+    var timeout: UInt32 = 500
+
+    @Option(help: "Maximum reads after writing")
+    var reads: Int = 1
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let packet = try USBManager.parseHexBytes(hex)
+            let result = try manager.sendRawProtocolPacket(packet, timeoutMs: timeout, reads: reads)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
+struct DeviceReset: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reset",
+        abstract: "Reset the HX Stomp USB device session"
+    )
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.resetUSBDevice()
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
+struct DeviceConnect: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "connect",
+        abstract: "Run the initial Helix USB connect handshake and print a trace"
+    )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 200
+
+    @Option(help: "Maximum inbound packets to process")
+    var maxPackets: Int = 80
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }
 
