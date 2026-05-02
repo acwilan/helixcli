@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+*.xcodeproj
+*.xcworkspace
+Package.resolved
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
