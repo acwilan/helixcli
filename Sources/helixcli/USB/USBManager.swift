@@ -493,6 +493,61 @@ final class USBManager {
         }
     }
 
+    func sendMidiProgramChange(_ program: Int, channel: Int = 0, timeoutMs: UInt32 = 500) throws -> [String: Any] {
+        guard (0...125).contains(program) else {
+            throw USBError.invalidResponse("MIDI Program Change must be between 0 and 125")
+        }
+        guard (0...15).contains(channel) else {
+            throw USBError.invalidResponse("MIDI channel must be between 0 and 15")
+        }
+
+        var context: OpaquePointer?
+        let initResult = libusb_init(&context)
+        guard initResult == 0 else {
+            throw USBError.connectionFailed("libusb_init failed: \(initResult)")
+        }
+        defer { libusb_exit(context) }
+
+        guard let device = try findSupportedDevice() else {
+            throw USBError.deviceNotFound
+        }
+
+        guard let handle = libusb_open_device_with_vid_pid(context, Self.line6VendorId, device.productId) else {
+            throw USBError.connectionFailed("libusb could not open device \(device.deviceId)")
+        }
+        defer { libusb_close(handle) }
+
+        let interfaceNumber: Int32 = 4
+        let kernelActive = libusb_kernel_driver_active(handle, interfaceNumber)
+        let claimResult = libusb_claim_interface(handle, interfaceNumber)
+        guard claimResult == 0 else {
+            throw USBError.connectionFailed("libusb_claim_interface(4) failed: \(libusbResultName(claimResult)) [\(claimResult)]. Close apps using HX Stomp MIDI and retry.")
+        }
+        defer { _ = libusb_release_interface(handle, interfaceNumber) }
+
+        let status = UInt8(0xC0 | (channel & 0x0F))
+        var packet: [UInt8] = [0x0C, status, UInt8(program), 0x00]
+        var bytesWritten: Int32 = 0
+        let packetCount = packet.count
+        let writeResult = packet.withUnsafeMutableBufferPointer { buffer in
+            libusb_bulk_transfer(handle, 0x02, buffer.baseAddress!, Int32(packetCount), &bytesWritten, timeoutMs)
+        }
+        guard writeResult == 0 else {
+            throw USBError.transferFailed("MIDI Program Change write failed: \(libusbResultName(writeResult)) [\(writeResult)]")
+        }
+
+        return [
+            "deviceId": device.deviceId,
+            "interfaceNumber": Int(interfaceNumber),
+            "kernelDriverActive": kernelActive,
+            "endpoint": "0x02",
+            "program": program,
+            "channel": channel + 1,
+            "bytesWritten": Int(bytesWritten),
+            "packetHex": hex(packet),
+        ]
+    }
+
     func sendRawProtocolPacket(_ packet: [UInt8], timeoutMs: UInt32 = 500, reads: Int = 1) throws -> [String: Any] {
         try withProtocolHandle { handle in
             var mutablePacket = packet

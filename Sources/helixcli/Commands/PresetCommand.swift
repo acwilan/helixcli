@@ -68,17 +68,31 @@ struct SwitchPreset: ParsableCommand {
     @Argument(help: "Preset ID (0-127)")
     var presetId: Int
     
-    func run() {
-        guard presetId >= 0 && presetId <= 127 else {
-            print(JSONResponse.failure(code: "INVALID_PRESET", message: "Preset ID must be between 0 and 127").toJSON())
+    @Option(help: "MIDI channel, 1-16")
+    var channel: Int = 1
+
+    @Option(help: "USB transfer timeout in milliseconds")
+    var timeout: UInt32 = 500
+
+    func run() throws {
+        guard presetId >= 0 && presetId <= 125 else {
+            print(JSONResponse.failure(code: "INVALID_PRESET", message: "Preset ID must be between 0 and 125").toJSON())
             return
         }
-        
-        let response = JSONResponse.success(data: [
-            "message": "Switching to preset \(presetId) - not yet implemented",
-            "presetId": presetId
-        ])
-        print(response.toJSON())
+        guard channel >= 1 && channel <= 16 else {
+            print(JSONResponse.failure(code: "INVALID_CHANNEL", message: "MIDI channel must be between 1 and 16").toJSON())
+            return
+        }
+
+        let manager = USBManager()
+        do {
+            let result = try manager.sendMidiProgramChange(presetId, channel: channel - 1, timeoutMs: timeout)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }
 
