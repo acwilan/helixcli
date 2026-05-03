@@ -4,13 +4,22 @@ struct HelixParameterValue {
     let index: Int
     let name: String
     let value: Any
+    let displayValue: String?
+    let displayKind: String?
 
     var json: [String: Any] {
-        [
+        var data: [String: Any] = [
             "index": index,
             "name": name,
             "value": value,
         ]
+        if let displayValue {
+            data["displayValue"] = displayValue
+        }
+        if let displayKind {
+            data["displayKind"] = displayKind
+        }
+        return data
     }
 }
 
@@ -47,7 +56,14 @@ enum HelixParameterCatalog {
     static func namedValues(for values: [Any], modelIds: [String], category: String) -> [HelixParameterValue] {
         let names = names(for: modelIds, category: category, count: values.count)
         return values.enumerated().map { index, value in
-            HelixParameterValue(index: index, name: names[index], value: value)
+            let display = display(for: value, name: names[index], category: category)
+            return HelixParameterValue(
+                index: index,
+                name: names[index],
+                value: value,
+                displayValue: display?.value,
+                displayKind: display?.kind
+            )
         }
     }
 
@@ -72,5 +88,76 @@ enum HelixParameterCatalog {
         return (0..<count).map { index in
             index < categoryNames.count ? categoryNames[index] : "Param \(index + 1)"
         }
+    }
+
+    private static func display(for rawValue: Any, name: String, category: String) -> (value: String, kind: String)? {
+        if let bool = rawValue as? Bool {
+            return (bool ? "On" : "Off", "boolean")
+        }
+
+        guard let value = numeric(rawValue) else { return nil }
+        let normalizedName = name.lowercased()
+
+        if normalizedName.contains("trail") {
+            return (value >= 0.5 ? "On" : "Off", "boolean")
+        }
+
+        if normalizedName.contains("mix") {
+            if value >= 0.0 && value <= 1.0 {
+                return (format(value * 100, decimals: 0) + "%", "percent")
+            }
+            return (format(value, decimals: abs(value) >= 100 ? 0 : 2), "raw")
+        }
+
+        if normalizedName.contains("low cut") || normalizedName.contains("high cut") {
+            if value >= 20 {
+                return (formatFrequency(value), "frequency")
+            }
+            return (format(value, decimals: 2), "raw")
+        }
+
+        if normalizedName.contains("time") {
+            return (format(value, decimals: 3), "raw-time")
+        }
+
+        if normalizedName.contains("mic") {
+            return (format(value, decimals: 0), "index")
+        }
+
+        if normalizedName.contains("distance") {
+            return (format(value, decimals: 0), "raw-distance")
+        }
+
+        if value >= 0.0 && value <= 1.0 {
+            return (format(value * 10, decimals: 1), "normalized-0-10")
+        }
+
+        return (format(value, decimals: abs(value) >= 100 ? 0 : 2), "raw")
+    }
+
+    private static func numeric(_ value: Any) -> Double? {
+        switch value {
+        case let value as Double:
+            return value
+        case let value as Float:
+            return Double(value)
+        case let value as Int:
+            return Double(value)
+        case let value as Bool:
+            return value ? 1.0 : 0.0
+        default:
+            return nil
+        }
+    }
+
+    private static func formatFrequency(_ value: Double) -> String {
+        if value >= 1000 {
+            return format(value / 1000, decimals: value >= 10000 ? 1 : 2) + " kHz"
+        }
+        return format(value, decimals: 0) + " Hz"
+    }
+
+    private static func format(_ value: Double, decimals: Int) -> String {
+        String(format: "%.*f", decimals, value)
     }
 }

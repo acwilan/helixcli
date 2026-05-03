@@ -13,9 +13,9 @@ Core preset control is working against real HX Stomp hardware:
 - current-preset raw data capture
 - current-preset block parsing with human-readable model/category names
 - read-only block list/get commands
-- first-pass parameter labels for common/current-preset models
+- first-pass parameter labels and conservative display values for common/current-preset models
 
-Still missing: verified parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
+Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
 
 See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes.
 

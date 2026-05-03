@@ -142,7 +142,7 @@ Error format:
 ## Tips for Agents
 
 1. **Always check current state first** - Don't assume what's loaded
-2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` labels exist, but parameter labels/units/scaling are not fully verified yet
+2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` includes `displayValue`, but labels/units/scaling are conservative and not fully verified yet
 3. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
 4. **Make incremental suggestions** - Don't change everything at once
 5. **Explain changes** - Tell the user what you're adjusting and why
