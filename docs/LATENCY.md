@@ -27,7 +27,7 @@ The script currently benchmarks:
 |---|---|---|
 | Current preset name | `helixcli preset current --timeout 500` | interactive command `0` |
 | Preset names/list | `helixcli preset list --timeout 250 --max-packets 120` | interactive command `2` |
-| Current preset data | `helixcli preset get-current --timeout 500 --max-packets 120` | interactive command `1` |
+| Current preset data | `helixcli preset get-current --skip-name --timeout 500 --max-packets 120` | interactive command `1` |
 
 ## Preliminary helixcli Numbers
 
@@ -36,14 +36,16 @@ Using the release binary, successful non-outlier calls were roughly:
 | Command | Typical latency observed |
 |---|---:|
 | `preset current` | ~0.6-0.8s |
-| `preset get-current` | ~0.85-1.0s |
+| `preset get-current --skip-name` | ~0.85-1.0s |
 | `preset list` | sometimes ~0.5s, but often ~31s |
 
 Important: these are preliminary and noisy. Repeated independent process invocations sometimes hit long waits:
 
 - `preset current`: one observed outlier around 63s
 - `preset list`: observed around 31s on multiple runs
-- `preset get`: one observed `NOT_CONNECTED` after around 63s, then subsequent calls worked again
+- `preset get-current`: one observed `NOT_CONNECTED` after around 63s, then subsequent calls worked again
+
+Plain `preset get-current` now also performs a separate current-name request, so it is expected to be slower than the original payload-only measurement. Use `--skip-name` for latency comparisons with the older data path.
 
 This suggests the current per-command connect/handshake lifecycle is not consistently settling cleanly every run. Median/typical command latency is promising, but tail latency needs work.
 

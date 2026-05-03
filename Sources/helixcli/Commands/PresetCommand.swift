@@ -113,11 +113,15 @@ struct SwitchPreset: ParsableCommand {
 }
 
 private enum PresetResponseSupport {
-    static func responseData(for presetInfo: PresetInfo, requestedPresetId: Int?, rawPayloadHex: String? = nil, packetCount: Any? = nil, totalBytes: Any? = nil) -> [String: Any] {
+    static func responseData(for presetInfo: PresetInfo, requestedPresetId: Int?, currentPresetName: String? = nil, nameLookupError: String? = nil, rawPayloadHex: String? = nil, packetCount: Any? = nil, totalBytes: Any? = nil) -> [String: Any] {
+        let resolvedName = currentPresetName ?? presetInfo.name
+        let nameSource = currentPresetName != nil ? "current-name-request" : "preset-payload-parser"
+
         var responseData: [String: Any] = [
             "requestedPresetId": requestedPresetId as Any,
             "source": "currentPreset",
-            "name": presetInfo.name,
+            "name": resolvedName,
+            "nameSource": nameSource,
             "currentSnapshot": presetInfo.currentSnapshot,
             "blockCount": presetInfo.blocks.count,
             "blocks": presetInfo.blocks.map { block in
@@ -131,6 +135,9 @@ private enum PresetResponseSupport {
             },
         ]
 
+        if let nameLookupError {
+            responseData["nameLookupError"] = nameLookupError
+        }
         if let rawPayloadHex {
             responseData["rawPayloadHex"] = rawPayloadHex
         }
@@ -146,9 +153,27 @@ private enum PresetResponseSupport {
 }
 
 private enum CurrentPresetDataReader {
-    static func read(timeout: UInt32, maxPackets: Int, verbose: Bool, requestedPresetId: Int?) throws -> [String: Any] {
-        let manager = USBManager()
-        let result = try manager.requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+    static func read(timeout: UInt32, maxPackets: Int, verbose: Bool, requestedPresetId: Int?, includeName: Bool = true) throws -> [String: Any] {
+        var currentPresetName: String? = nil
+        var nameLookupError: String? = nil
+        if includeName {
+            do {
+                let nameManager = USBManager()
+                let nameResult = try nameManager.connectHandshake(timeoutMs: timeout, maxPackets: maxPackets, requestCurrentPresetName: true)
+                currentPresetName = nameResult["currentPresetName"] as? String
+                if currentPresetName == nil {
+                    nameLookupError = "Current preset name was not present in device response"
+                }
+            } catch USBError.deviceNotFound {
+                nameLookupError = "HX Stomp not connected via USB"
+            } catch USBError.transferFailed(let message), USBError.connectionFailed(let message), USBError.invalidResponse(let message) {
+                nameLookupError = message
+            } catch {
+                nameLookupError = error.localizedDescription
+            }
+        }
+
+        let result = try requestPresetDataWithRetry(timeout: timeout, maxPackets: maxPackets, verbose: verbose, retryOnce: includeName)
 
         guard let connected = result["connected"] as? Bool, connected else {
             throw USBError.connectionFailed("Failed to connect to HX Stomp")
@@ -160,13 +185,29 @@ private enum CurrentPresetDataReader {
 
         let parser = PresetDataParser(hexString: payloadHex)
         let presetInfo = parser.parse()
+
         return PresetResponseSupport.responseData(
             for: presetInfo,
             requestedPresetId: requestedPresetId,
+            currentPresetName: currentPresetName,
+            nameLookupError: nameLookupError,
             rawPayloadHex: verbose ? payloadHex : nil,
             packetCount: verbose ? result["packetCount"] : nil,
             totalBytes: verbose ? result["totalBytes"] : nil
         )
+    }
+
+    private static func requestPresetDataWithRetry(timeout: UInt32, maxPackets: Int, verbose: Bool, retryOnce: Bool) throws -> [String: Any] {
+        do {
+            let result = try USBManager().requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+            if retryOnce, (result["connected"] as? Bool) != true {
+                return try USBManager().requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+            }
+            return result
+        } catch {
+            guard retryOnce else { throw error }
+            return try USBManager().requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+        }
     }
 }
 
@@ -185,9 +226,12 @@ struct GetCurrentPreset: ParsableCommand {
     @Flag(name: .shortAndLong, help: "Include full raw data")
     var verbose = false
 
+    @Flag(help: "Skip separate current-name request; faster but name may be Unknown")
+    var skipName = false
+
     func run() throws {
         do {
-            let responseData = try CurrentPresetDataReader.read(timeout: timeout, maxPackets: maxPackets, verbose: verbose, requestedPresetId: nil)
+            let responseData = try CurrentPresetDataReader.read(timeout: timeout, maxPackets: maxPackets, verbose: verbose, requestedPresetId: nil, includeName: !skipName)
             print(JSONResponse.success(data: responseData).toJSON())
         } catch USBError.deviceNotFound {
             print(JSONResponse.deviceNotFound().toJSON())

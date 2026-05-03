@@ -47,8 +47,11 @@ helixcli preset current
 # Switch to preset by ID (0-127)
 helixcli preset switch <ID>
 
-# Get current preset details including partially parsed effect blocks
+# Get current preset details including current name and partially parsed effect blocks
 helixcli preset get-current --timeout 500 --max-packets 120
+
+# Faster current preset details without the separate current-name request
+helixcli preset get-current --skip-name --timeout 500 --max-packets 120
 
 # Deprecated compatibility alias: --id is informational; this reads current preset data.
 helixcli preset get --id <ID> --timeout 500 --max-packets 120

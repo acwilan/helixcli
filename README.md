@@ -70,8 +70,11 @@ helixcli preset current
 # Switch to preset
 helixcli preset switch 12
 
-# Get currently loaded preset details
+# Get currently loaded preset details, including current preset name when available
 helixcli preset get-current
+
+# Faster detail read without the separate current-name request
+helixcli preset get-current --skip-name
 
 # Deprecated compatibility alias; reads current preset only, --id is informational
 helixcli preset get --id 5
