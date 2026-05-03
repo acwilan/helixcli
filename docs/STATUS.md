@@ -130,6 +130,16 @@ Representative verified behavior:
 - `preset list` decoded all 125 preset names.
 - `preset get --id 0` returned 16 blocks and parsed parameter values.
 
+## Latency / Benchmarking
+
+Preliminary latency notes and the comparison plan against `helix_usb` are documented in [`LATENCY.md`](LATENCY.md).
+
+Current quick read:
+
+- `helixcli preset current` and `preset get --id 0` can complete around ~0.6-1.0s with the release binary.
+- Tail latency is not stable yet; some independent command runs waited ~30-60s.
+- Automated `helix_usb` benchmarking needs more work because the Python interactive session did not settle cleanly under `pexpect` during the first attempt.
+
 ## What Is Missing / Next Work
 
 ### Highest Priority

@@ -15,7 +15,7 @@ Core preset control is working against real HX Stomp hardware:
 
 Still missing: human-readable model/parameter mappings, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
 
-See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix.
+See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes.
 
 ## Installation
 
