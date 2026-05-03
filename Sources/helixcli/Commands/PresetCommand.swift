@@ -113,25 +113,68 @@ struct SwitchPreset: ParsableCommand {
 struct GetPreset: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Get preset details"
+        abstract: "Get preset details with blocks and parameters"
     )
-    
-    @Option(help: "Preset ID")
+
+    @Option(help: "Preset ID (0-125). If not provided, gets current preset")
     var id: Int?
-    
-    @Option(name: .shortAndLong, help: "Output format")
-    var format: OutputFormat = .json
-    
-    enum OutputFormat: String, CaseIterable, ExpressibleByArgument {
-        case json
-        case table
-    }
-    
-    func run() {
-        let response = JSONResponse.success(data: [
-            "message": "Getting preset details - not yet implemented",
-            "presetId": id as Any
-        ])
-        print(response.toJSON())
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets to read")
+    var maxPackets: Int = 200
+
+    @Flag(name: .shortAndLong, help: "Include full raw data")
+    var verbose = false
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            // Get the preset data
+            let result = try manager.requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+
+            guard let connected = result["connected"] as? Bool, connected else {
+                print(JSONResponse.failure(code: "NOT_CONNECTED", message: "Failed to connect to HX Stomp").toJSON())
+                return
+            }
+
+            guard let payloadHex = result["payloadHex"] as? String, !payloadHex.isEmpty else {
+                print(JSONResponse.failure(code: "NO_DATA", message: "No preset data received from device").toJSON())
+                return
+            }
+
+            // Parse the preset data
+            let parser = PresetDataParser(hexString: payloadHex)
+            let presetInfo = parser.parse()
+
+            var responseData: [String: Any] = [
+                "presetId": id as Any,
+                "name": presetInfo.name,
+                "currentSnapshot": presetInfo.currentSnapshot,
+                "blockCount": presetInfo.blocks.count,
+                "blocks": presetInfo.blocks.map { block in
+                    [
+                        "slot": block.slot,
+                        "modelName": block.modelName,
+                        "type": block.type,
+                        "enabled": block.enabled,
+                        "params": block.params
+                    ]
+                }
+            ]
+
+            if verbose {
+                responseData["rawPayloadHex"] = payloadHex
+                responseData["packetCount"] = result["packetCount"] as Any
+                responseData["totalBytes"] = result["totalBytes"] as Any
+            }
+
+            print(JSONResponse.success(data: responseData).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
     }
 }

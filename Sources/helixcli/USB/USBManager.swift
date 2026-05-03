@@ -516,6 +516,251 @@ final class USBManager {
         }
     }
 
+    /// Request full preset data from the device.
+    /// This performs a full handshake, then sends the preset data request (subcommand 0x03)
+    /// and reads the multi-packet response.
+    func requestPresetData(timeoutMs: UInt32 = 250, maxPackets: Int = 200, verbose: Bool = false) throws -> [String: Any] {
+        try withProtocolHandle { handle in
+            var x1: UInt8 = 0x02
+            var x2: UInt8 = 0x02
+            var x80: UInt8 = 0x02
+            var receivedX2 = false
+            var receivedX80 = false
+            var trace: [[String: Any]] = []
+            var packets: [[UInt8]] = []
+            var totalBytes = 0
+
+            func nextSeq(for stream: UInt8) -> UInt8 {
+                switch stream {
+                case 0x01:
+                    defer { x1 &+= 1 }
+                    return x1
+                case 0x02:
+                    defer { x2 &+= 1 }
+                    return x2
+                case 0x80:
+                    defer { x80 &+= 1 }
+                    return x80
+                default:
+                    return 0
+                }
+            }
+
+            func resolve(_ template: [Int]) -> [UInt8] {
+                var packet = template.map { $0 < 0 ? UInt8(0) : UInt8($0) }
+                if template.count > 9, template[9] < 0, template.count > 4 {
+                    packet[9] = nextSeq(for: packet[4])
+                }
+                return packet
+            }
+
+            func write(_ name: String, _ template: [Int]) throws {
+                var packet = resolve(template)
+                let packetCount = packet.count
+                var written: Int32 = 0
+                let result = packet.withUnsafeMutableBufferPointer { buffer in
+                    libusb_bulk_transfer(handle, 0x01, buffer.baseAddress!, Int32(packetCount), &written, timeoutMs)
+                }
+                trace.append([
+                    "direction": "out",
+                    "name": name,
+                    "result": libusbResultName(result),
+                    "bytes": Int(written),
+                    "hex": hex(packet),
+                ])
+                if result != 0 {
+                    throw USBError.transferFailed("write \(name) failed: \(libusbResultName(result)) [\(result)]")
+                }
+            }
+
+            func frameLength(_ bytes: [UInt8], at offset: Int) -> Int? {
+                guard offset + 4 <= bytes.count else { return nil }
+                let first = bytes[offset]
+                let fourth = bytes[offset + 3]
+                switch (first, fourth) {
+                case (0x08, 0x18): return 16
+                case (0x0c, 0x28): return 20
+                case (0x11, 0x18): return 28
+                case (0x19, 0x18): return 36
+                case (0x1c, 0x18): return 36
+                case (0x1d, 0x18): return 40
+                case (0x1f, 0x18): return 40
+                case (0x28, 0x18): return 48
+                case (0x54, 0x18): return 92
+                default:
+                    let candidate = Int(first) + 8
+                    return candidate > 0 ? candidate : nil
+                }
+            }
+
+            func splitFrames(_ bytes: [UInt8]) -> [[UInt8]] {
+                var frames: [[UInt8]] = []
+                var offset = 0
+                while offset < bytes.count {
+                    guard let length = frameLength(bytes, at: offset), length > 0, offset + length <= bytes.count else {
+                        frames.append(Array(bytes[offset...]))
+                        break
+                    }
+                    frames.append(Array(bytes[offset..<offset + length]))
+                    offset += length
+                }
+                return frames
+            }
+
+            func readFrames() -> [[UInt8]] {
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                var read: Int32 = 0
+                let result = buffer.withUnsafeMutableBufferPointer { ptr in
+                    libusb_bulk_transfer(handle, 0x81, ptr.baseAddress!, Int32(ptr.count), &read, timeoutMs)
+                }
+                if result == LIBUSB_ERROR_TIMEOUT.rawValue { return [] }
+                let bytes = read > 0 ? Array(buffer.prefix(Int(read))) : []
+                let frames = result == 0 ? splitFrames(bytes) : []
+                if frames.isEmpty {
+                    trace.append([
+                        "direction": "in",
+                        "result": libusbResultName(result),
+                        "bytes": Int(read),
+                        "hex": hex(bytes),
+                    ])
+                } else {
+                    for frame in frames {
+                        trace.append([
+                            "direction": "in",
+                            "result": libusbResultName(result),
+                            "bytes": frame.count,
+                            "hex": hex(frame),
+                        ])
+                    }
+                }
+                return frames
+            }
+
+            func matches(_ packet: [UInt8], _ pattern: [Int], length: Int? = nil) -> Bool {
+                let len = length ?? min(packet.count, pattern.count)
+                guard packet.count >= len, pattern.count >= len else { return false }
+                for idx in 0..<len {
+                    if pattern[idx] >= 0 && packet[idx] != UInt8(pattern[idx]) { return false }
+                }
+                return true
+            }
+
+            _ = libusb_clear_halt(handle, 0x01)
+            _ = libusb_clear_halt(handle, 0x81)
+
+            var drainedFrames = 0
+            while true {
+                let frames = readFrames()
+                if frames.isEmpty { break }
+                drainedFrames += frames.count
+                if drainedFrames > 200 { break }
+            }
+            trace.append(["direction": "internal", "name": "drain-complete", "frames": drainedFrames])
+
+            try write("connect-x1-start", [0x0c, 0x00, 0x00, 0x28, 0x01, 0x10, 0xef, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x21, 0x00, 0x10, 0x00, 0x00])
+
+            func runConnectLoop() throws {
+                for _ in 0..<maxPackets {
+                    let packets = readFrames()
+                    if packets.isEmpty { continue }
+                    for packet in packets {
+
+                        if matches(packet, [0x0c,0x00,0x00,0x28,0xef,0x03,0x01,0x10,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x01,0x00,0x02,0x00,0x00], length: 20) {
+                            try write("x1-hello-reply", [0x11,0x00,0x00,0x18,0x01,0x10,0xef,0x03,0x00,-1,0x00,0x04,0x00,0x10,0x00,0x00,0x01,0x00,0x05,0x00,0x01,0x00,0x00,0x00,0x05,0x00,0x00,0x00])
+                        } else if matches(packet, [0x28,0x00,0x00,0x18,0xef,0x03,0x01,0x10,0x00,0x02,0x00,0x04,0x09,0x02], length: 14) {
+                            try write("x1-ack-20", [0x08,0x00,0x00,0x18,0x01,0x10,0xef,0x03,0x00,-1,0x00,0x08,0x20,0x10,0x00,0x00])
+                        } else if matches(packet, [0x08,0x00,0x00,0x18,0xef,0x03,0x01,0x10,0x00,0x03,0x00,-1,0x09,0x02,0x00,0x00], length: 16) {
+                            try write("x1-ack-20-short", [0x08,0x00,0x00,0x18,0x01,0x10,0xef,0x03,0x00,-1,0x00,0x02,0x20,0x10,0x00,0x00])
+                        } else if matches(packet, [0x08,0x00,0x00,0x18,0xef,0x03,0x01,0x10,0x00,0x04,0x00,-1,0x09,0x02,0x00,0x00], length: 16) {
+                            try write("connect-x80-start", [0x0c,0x00,0x00,0x28,0x80,0x10,0xed,0x03,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x21,0x00,0x10,0x00,0x00])
+                        } else if matches(packet, [0x0c,0x00,0x00,0x28,0xed,0x03,0x80,0x10,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x01,0x00,0x02,0x00,0x00], length: 20) {
+                            try write("x80-hello-reply", [0x11,0x00,0x00,0x18,0x80,0x10,0xed,0x03,0x00,-1,0x00,0x04,0x00,0x10,0x00,0x00,0x01,0x00,0x06,0x00,0x01,0x00,0x00,0x00,0x06,0x00,0x00,0x00])
+                        } else if matches(packet, [0x11,0x00,0x00,0x18,0xed,0x03,0x80,0x10,0x00,0x02], length: 10) {
+                            receivedX80 = true
+                            try write("connect-x2-start", [0x0c,0x00,0x00,0x28,0x02,0x10,0xf0,0x03,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x21,0x00,0x10,0x00,0x00])
+                        } else if matches(packet, [0x0c,0x00,0x00,0x28,0xf0,0x03,0x02,0x10,0x00,0x00,0x00,0x02,0x00,0x01,0x00,0x01,0x00,0x02,0x00,0x00], length: 20) {
+                            try write("x2-hello-reply", [0x11,0x00,0x00,0x18,0x02,0x10,0xf0,0x03,0x00,-1,0x00,0x04,0x00,0x10,0x00,0x00,0x01,0x00,0x04,0x00,0x01,0x00,0x00,0x00,0x04,0x00,0x00,0x00])
+                        } else if matches(packet, [0x11,0x00,0x00,0x18,0xf0,0x03,0x02,0x10,0x00,0x02,0x00,0x04,0x09,0x02], length: 14) {
+                            receivedX2 = true
+                        } else if matches(packet, [0x08,0x00,0x00,0x18,0xef,0x03,0x01,0x10,0x00,-1,0x00,0x10], length: 12) ||
+                                  matches(packet, [0x08,0x00,0x00,0x18,0xf0,0x03,0x02,0x10,0x00,-1,0x00,0x10], length: 12) ||
+                                  matches(packet, [0x08,0x00,0x00,0x18,0xed,0x03,0x80,0x10,0x00,-1,0x00,0x10], length: 12) {
+                        }
+
+                        if receivedX2 && receivedX80 { break }
+                    }
+                    if receivedX2 && receivedX80 { break }
+                }
+            }
+
+            try runConnectLoop()
+
+            // After handshake, request preset data (subcommand 0x03 instead of 0x04 for current preset name)
+            let sessionNo: UInt8 = 0x1a
+            let packetDouble: [UInt8] = [0x1e, 0x00]
+            let requestSessionId: UInt8 = 0xf4
+            var presetData: [UInt8] = []
+            var timeouts = 0
+            var packetCounter: UInt16 = 0x001e
+
+            // Send the preset data request
+            try write("request-preset-data", [0x19, 0x00, 0x00, 0x18, 0x80, 0x10, 0xed, 0x03, 0x00, -1, 0x00, 0x0c, Int(sessionNo), Int(packetDouble[0]), Int(packetDouble[1]), 0x00, 0x01, 0x00, 0x06, 0x00, 0x09, 0x00, 0x00, 0x00, 0x83, 0x66, 0xcd, 0x03, Int(requestSessionId), 0x64, 0x16, 0x65, 0xc0, 0x00, 0x00, 0x00])
+
+            // Read response packets
+            for _ in 0..<maxPackets {
+                let frames = readFrames()
+                if frames.isEmpty {
+                    timeouts += 1
+                    if timeouts >= 4 { break }
+                    continue
+                }
+                timeouts = 0
+
+                for frame in frames {
+                    // Check if this is a data packet on stream x80 (response from device)
+                    // Pattern: [length bytes] 0x18 0xed 0x03 0x80 0x10 ...
+                    if frame.count >= 16 &&
+                       frame[3] == 0x18 &&
+                       frame[4] == 0xed && frame[5] == 0x03 &&
+                       frame[6] == 0x80 && frame[7] == 0x10 {
+
+                        // Skip first 16 bytes (protocol header) and capture payload
+                        let payload = Array(frame.dropFirst(16))
+                        presetData.append(contentsOf: payload)
+                        packets.append(frame)
+                        totalBytes += frame.count
+
+                        // Check if this is the end packet (length byte at position 1 == 0x02)
+                        let isEndPacket = frame[1] == 0x02
+
+                        // Send ACK for every packet (except first which we skip per Python)
+                        if packets.count > 1 {
+                            let nextPacketDoubleLow = UInt8(packetCounter & 0xFF)
+                            let nextPacketDoubleHigh = UInt8((packetCounter >> 8) & 0xFF)
+                            try write("ack-preset-data", [0x08, 0x00, 0x00, 0x18, 0x80, 0x10, 0xed, 0x03, 0x00, -1, 0x00, 0x08, Int(sessionNo), Int(nextPacketDoubleLow), Int(nextPacketDoubleHigh), 0x00])
+                        }
+                        packetCounter += 1
+
+                        if isEndPacket {
+                            break
+                        }
+                    }
+                }
+            }
+
+            return [
+                "connected": receivedX2 && receivedX80,
+                "packetCount": packets.count,
+                "totalBytes": totalBytes,
+                "payloadBytes": presetData.count,
+                "packets": packets.enumerated().map { ["index": $0.offset, "bytes": $0.element.count, "hex": hex($0.element)] },
+                "payloadHex": hex(presetData),
+                "trace": verbose ? trace : [],
+                "traceCount": trace.count,
+            ]
+        }
+    }
+
     func sendMidiProgramChange(_ program: Int, channel: Int = 0, timeoutMs: UInt32 = 500) throws -> [String: Any] {
         guard (0...125).contains(program) else {
             throw USBError.invalidResponse("MIDI Program Change must be between 0 and 125")

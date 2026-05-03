@@ -186,3 +186,232 @@ struct HelixResponseParser {
         return (idx6b * 25) + idx6c
     }
 }
+
+/// Represents a parsed preset block/slot
+struct PresetBlock {
+    let slot: String
+    let modelName: String
+    let type: String
+    let enabled: Bool
+    let params: [String: Any]
+}
+
+/// Parsed preset information
+struct PresetInfo {
+    let name: String
+    let currentSnapshot: Int
+    let blocks: [PresetBlock]
+}
+
+/// Parser for preset data from HX Stomp
+/// Based on Python reference: helix_usb/utils/preset_parser.py
+class PresetDataParser {
+    private let hexString: String
+    private var data: [UInt8]
+
+    init(hexString: String) {
+        self.hexString = hexString
+        // Convert hex string to bytes
+        var bytes: [UInt8] = []
+        let cleanHex = hexString.replacingOccurrences(of: " ", with: "").replacingOccurrences(of: "\n", with: "")
+        var index = cleanHex.startIndex
+        while index < cleanHex.endIndex {
+            let nextIndex = cleanHex.index(index, offsetBy: 2, limitedBy: cleanHex.endIndex) ?? cleanHex.endIndex
+            if let byte = UInt8(cleanHex[index..<nextIndex], radix: 16) {
+                bytes.append(byte)
+            }
+            index = nextIndex
+        }
+        self.data = bytes
+    }
+
+    /// Parse the preset data and extract information
+    func parse() -> PresetInfo {
+        let name = extractPresetName()
+        let currentSnapshot = extractCurrentSnapshot()
+        let blocks = extractBlocks()
+
+        return PresetInfo(
+            name: name,
+            currentSnapshot: currentSnapshot,
+            blocks: blocks
+        )
+    }
+
+    /// Extract preset name from the data
+    /// Pattern: 83 66 cd 04 04 ... 6d aa <name>
+    private func extractPresetName() -> String {
+        let pattern: [UInt8] = [0x83, 0x66, 0xcd, 0x04, 0x04]
+        guard let markerIndex = find(pattern, in: data, startingAt: 0) else {
+            return "Unknown"
+        }
+
+        // Look for 0x6d marker which precedes the name
+        let searchStart = markerIndex + pattern.count
+        for i in searchStart..<min(searchStart + 50, data.count) {
+            if data[i] == 0x6d {
+                // Name starts after 0x6d and length byte
+                let nameStart = i + 2
+                var nameBytes: [UInt8] = []
+                for j in nameStart..<min(nameStart + 32, data.count) {
+                    if data[j] == 0x00 { break }
+                    if data[j] >= 32 && data[j] <= 126 {
+                        nameBytes.append(data[j])
+                    }
+                }
+                if let name = String(bytes: nameBytes, encoding: .ascii), !name.isEmpty {
+                    return name
+                }
+            }
+        }
+
+        return "Unknown"
+    }
+
+    /// Extract current snapshot from the data
+    /// Pattern: 86 06 00/01/02 07 02 08
+    private func extractCurrentSnapshot() -> Int {
+        // Snapshot patterns in the data
+        if find([0x86, 0x06, 0x00, 0x07, 0x02, 0x08], in: data, startingAt: 0) != nil {
+            return 1
+        }
+        if find([0x86, 0x06, 0x01, 0x07, 0x02, 0x08], in: data, startingAt: 0) != nil {
+            return 2
+        }
+        if find([0x86, 0x06, 0x02, 0x07, 0x02, 0x08], in: data, startingAt: 0) != nil {
+            return 3
+        }
+        return 1 // Default to snapshot 1
+    }
+
+    /// Extract blocks/slots from the preset data
+    private func extractBlocks() -> [PresetBlock] {
+        var blocks: [PresetBlock] = []
+
+        // Look for slot markers: 82 15 or 82 13
+        // These mark the beginning of slot information
+        var cursor = 0
+        let slotPositions = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8",
+                             "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8"]
+
+        // Find the slot section
+        guard let slotSectionStart = find([0x82, 0x15], in: data, startingAt: 0) else {
+            return blocks
+        }
+
+        cursor = slotSectionStart + 2
+
+        // Skip to where actual slot data starts (look for 80 13 pattern)
+        while cursor < data.count - 1 {
+            if data[cursor] == 0x80 && (data[cursor + 1] == 0x13 || data[cursor + 1] == 0x14) {
+                break
+            }
+            cursor += 1
+        }
+
+        // Parse each slot
+        var slotIndex = 0
+        while cursor < data.count - 2 && slotIndex < slotPositions.count {
+            // Slot header: 80 13 or 80 14
+            guard data[cursor] == 0x80 else {
+                cursor += 1
+                continue
+            }
+
+            let slotStart = cursor
+
+            // Find end of this slot (next 80 13/14 or end marker)
+            var slotEnd = cursor + 2
+            while slotEnd < data.count - 1 {
+                if data[slotEnd] == 0x80 && (data[slotEnd + 1] == 0x13 || data[slotEnd + 1] == 0x14) {
+                    break
+                }
+                if data[slotEnd] == 0x08 && data[slotEnd + 1] == 0x95 {
+                    break // Footswitch section marker
+                }
+                slotEnd += 1
+            }
+
+            let slotData = Array(data[slotStart..<slotEnd])
+            let block = parseSlot(slotData, position: slotPositions[slotIndex])
+            blocks.append(block)
+
+            slotIndex += 1
+            cursor = slotEnd
+        }
+
+        return blocks
+    }
+
+    /// Parse a single slot's data
+    private func parseSlot(_ slotData: [UInt8], position: String) -> PresetBlock {
+        var modelName = "Empty"
+        var type = "None"
+        var enabled = false
+        var params: [String: Any] = [:]
+
+        guard slotData.count >= 4 else {
+            return PresetBlock(slot: position, modelName: modelName, type: type, enabled: enabled, params: params)
+        }
+
+        // Check if empty slot (81 14 c0)
+        if slotData.contains(0x81) && slotData.contains(0x14) && slotData.contains(0xc0) {
+            return PresetBlock(slot: position, modelName: "Empty", type: "None", enabled: false, params: params)
+        }
+
+        // Check enabled status (0x0a c3 = enabled, 0x0a c2 = disabled)
+        if let enabledIndex = slotData.firstIndex(of: 0x0a) {
+            if enabledIndex + 1 < slotData.count {
+                enabled = slotData[enabledIndex + 1] == 0xc3
+            }
+        }
+
+        // Extract model ID (look for pattern around 14 or 17 marker)
+        // This is a simplified extraction - full parsing would require
+        // the complete modules dictionary from the Python reference
+        if let modelMarker = slotData.firstIndex(of: 0x14) {
+            if modelMarker + 2 < slotData.count {
+                let modelId = String(format: "%02x%02x", slotData[modelMarker + 1], slotData[modelMarker + 2])
+                modelName = modelIdToName(modelId)
+
+                // Determine type based on slot position and content
+                if position.starts(with: "A") {
+                    type = "Effect"
+                } else {
+                    type = "Effect"
+                }
+            }
+        }
+
+        // Try to extract parameters
+        // Look for parameter markers (typically starting with 0x07)
+        if let paramMarker = slotData.firstIndex(of: 0x07) {
+            if paramMarker + 5 < slotData.count {
+                // Simplified parameter extraction
+                // Full implementation would parse IEEE 754 floats
+                let paramCount = Int(slotData[paramMarker + 2])
+                params["paramCount"] = paramCount
+            }
+        }
+
+        return PresetBlock(slot: position, modelName: modelName, type: type, enabled: enabled, params: params)
+    }
+
+    /// Convert model ID to name (simplified - would need full module mapping)
+    private func modelIdToName(_ id: String) -> String {
+        // This is a simplified mapping
+        // Full implementation would include all the modules from the Python reference
+        return "Model \(id)"
+    }
+
+    /// Find pattern in byte array
+    private func find(_ pattern: [UInt8], in bytes: [UInt8], startingAt start: Int) -> Int? {
+        guard !pattern.isEmpty, bytes.count >= pattern.count else { return nil }
+        for i in start...(bytes.count - pattern.count) {
+            if Array(bytes[i..<i + pattern.count]) == pattern {
+                return i
+            }
+        }
+        return nil
+    }
+}

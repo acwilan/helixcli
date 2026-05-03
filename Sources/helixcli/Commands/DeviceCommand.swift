@@ -16,6 +16,7 @@ struct DeviceCommand: ParsableCommand {
             DeviceSendRaw.self,
             DevicePresetNames.self,
             DeviceCurrentName.self,
+            DevicePresetData.self,
         ]
     )
 }
@@ -195,6 +196,34 @@ struct DeviceProbe: ParsableCommand {
             print(JSONResponse.success(data: result).toJSON())
         } catch USBError.deviceNotFound {
             print(JSONResponse.deviceNotFound().toJSON())
+        }
+    }
+}
+
+struct DevicePresetData: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "preset-data",
+        abstract: "Diagnostic: request and capture raw preset data packets"
+    )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets to read")
+    var maxPackets: Int = 200
+
+    @Flag(help: "Include full packet trace in output")
+    var verbose = false
+
+    func run() throws {
+        let manager = USBManager()
+        do {
+            let result = try manager.requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+            print(JSONResponse.success(data: result).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
         }
     }
 }
