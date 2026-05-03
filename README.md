@@ -2,6 +2,20 @@
 
 A native macOS command-line tool for controlling Line 6 HX Stomp guitar processors via USB.
 
+`helixcli` is a Swift/macOS-native implementation inspired by and heavily informed by [`kempline/helix_usb`](https://github.com/kempline/helix_usb), the Python project that mapped much of the HX Stomp USB protocol behavior this tool builds on. The goal here is to keep the protocol learnings from `helix_usb` while providing a dependency-light CLI that is easy to package, script, and call from OpenClaw.
+
+## Relationship to helix_usb
+
+This project would not exist without [`helix_usb`](https://github.com/kempline/helix_usb). It remains the primary reference implementation for:
+
+- proprietary Helix/HX USB handshake and packet flow
+- preset-name and current-preset data requests
+- slot/module parsing heuristics
+- model/module ID catalogs
+- latency comparison against a long-running Python USB session
+
+`helixcli` is not a drop-in replacement yet. It currently focuses on native macOS CLI usage, read/control operations that are verified on Andres's HX Stomp, and OpenClaw-friendly JSON output. When behavior differs from `helix_usb`, the local docs call that out explicitly.
+
 ## Current Status
 
 Core preset control is working against real HX Stomp hardware:
@@ -95,6 +109,10 @@ helixcli block param A3 drive 0.7
 ## OpenClaw Integration
 
 See [`docs/SKILL.md`](docs/SKILL.md) for agent guidance and [`docs/STATUS.md`](docs/STATUS.md) for the current implementation status.
+
+## Acknowledgements
+
+Special thanks to [`kempline/helix_usb`](https://github.com/kempline/helix_usb) for the original Python implementation and protocol exploration. Much of `helixcli`'s packet structure, parser strategy, and model catalog work traces back to that project.
 
 ## License
 
