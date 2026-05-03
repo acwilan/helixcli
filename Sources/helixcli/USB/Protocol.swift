@@ -209,6 +209,14 @@ class PresetDataParser {
     private let hexString: String
     private var data: [UInt8]
 
+    /// Convert 4-byte IEEE 754 big-endian float to Swift Float
+    private func ieee754ToFloat(_ bytes: [UInt8]) -> Float {
+        guard bytes.count == 4 else { return 0.0 }
+        // IEEE 754 big-endian: sign(1) | exponent(8) | mantissa(23)
+        let bits = (UInt32(bytes[0]) << 24) | (UInt32(bytes[1]) << 16) | (UInt32(bytes[2]) << 8) | UInt32(bytes[3])
+        return Float(bitPattern: bits)
+    }
+
     init(hexString: String) {
         self.hexString = hexString
         // Convert hex string to bytes
@@ -239,33 +247,65 @@ class PresetDataParser {
     }
 
     /// Extract preset name from the data
-    /// Pattern: 83 66 cd 04 04 ... 6d aa <name>
+    /// Looks for ASCII string patterns in the preset data.
+    /// The preset data contains multiple ASCII strings (model names, firmware versions, etc.)
+    /// plus the preset name itself. We scan for strings >= 5 chars and filter.
     private func extractPresetName() -> String {
-        let pattern: [UInt8] = [0x83, 0x66, 0xcd, 0x04, 0x04]
-        guard let markerIndex = find(pattern, in: data, startingAt: 0) else {
-            return "Unknown"
+        // Strategy: Look for common ASCII strings that are NOT firmware version, SNAPSHOT, or model names
+        // The preset name typically appears near model data and has specific characteristics:
+        // - It's a single string, not part of a repeating pattern
+        // - It appears before slot data
+        // - It contains alphanumeric characters, spaces, hyphens, and common punctuation
+
+        // Find all ASCII strings >= 5 chars
+        var strings: [(offset: Int, value: String)] = []
+        var currentOffset = 0
+        var currentString = ""
+        var stringStart = 0
+
+        while currentOffset < data.count {
+            let byte = data[currentOffset]
+            if byte >= 32 && byte <= 126 {
+                if currentString.isEmpty {
+                    stringStart = currentOffset
+                }
+                currentString.append(Character(UnicodeScalar(byte)))
+            } else {
+                if currentString.count >= 5 {
+                    strings.append((stringStart, currentString))
+                }
+                currentString = ""
+            }
+            currentOffset += 1
+        }
+        if currentString.count >= 5 {
+            strings.append((stringStart, currentString))
         }
 
-        // Look for 0x6d marker which precedes the name
-        let searchStart = markerIndex + pattern.count
-        for i in searchStart..<min(searchStart + 50, data.count) {
-            if data[i] == 0x6d {
-                // Name starts after 0x6d and length byte
-                let nameStart = i + 2
-                var nameBytes: [UInt8] = []
-                for j in nameStart..<min(nameStart + 32, data.count) {
-                    if data[j] == 0x00 { break }
-                    if data[j] >= 32 && data[j] <= 126 {
-                        nameBytes.append(data[j])
-                    }
-                }
-                if let name = String(bytes: nameBytes, encoding: .ascii), !name.isEmpty {
-                    return name
-                }
+        // Filter: exclude firmware version patterns, SNAPSHOT, model names
+        let excludePatterns = ["v3.", "SNAPSHOT", "Deluxe", "Vintage", "Phaser", "Distortion", "Reverb", "Delay", "Chorus", "Flanger", "Tremolo", "Wah", "Compressor", "EQ", "Gate", "Limit", "Pitch", "Synth", "Filter", "Looper", "Cab", "Amp", "Tube", "Screamer", "Overdrive", "Fuzz"]
+
+        let candidates = strings.filter { s in
+            !s.value.hasPrefix("v3.") &&
+            !s.value.hasPrefix("SNAPSHOT") &&
+            !excludePatterns.contains(where: { s.value.contains($0) })
+        }
+
+        // The preset name is typically the first non-excluded string after firmware version
+        // or the string immediately before the slot section (8215 marker)
+        if let slotSectionStart = find([0x82, 0x15], in: data, startingAt: 0) {
+            let nearbyStrings = candidates.filter { $0.offset < slotSectionStart && $0.offset > 0 }
+            if !nearbyStrings.isEmpty {
+                // Return the string closest to but before slot section
+                return nearbyStrings.sorted { $0.offset > $1.offset }.first?.value ?? "Unknown"
             }
         }
 
-        return "Unknown"
+        // Fallback: first substantial string that's not firmware
+        let firmwareString = strings.first { $0.value.hasPrefix("v3.") }
+        let firmwareOffset = firmwareString?.offset ?? 0
+        let postFirmware = candidates.filter { $0.offset > firmwareOffset + 20 }
+        return postFirmware.first?.value ?? "Unknown"
     }
 
     /// Extract current snapshot from the data
@@ -301,29 +341,30 @@ class PresetDataParser {
 
         cursor = slotSectionStart + 2
 
-        // Skip to where actual slot data starts (look for 80 13 pattern)
+        // Skip to where actual slot data starts (look for 82 13 pattern)
         while cursor < data.count - 1 {
-            if data[cursor] == 0x80 && (data[cursor + 1] == 0x13 || data[cursor + 1] == 0x14) {
+            if data[cursor] == 0x82 && (data[cursor + 1] == 0x13 || data[cursor + 1] == 0x14) {
                 break
             }
             cursor += 1
         }
 
         // Parse each slot
+        // The slot data uses 82 13 / 82 14 markers (not 80 13 / 80 14)
         var slotIndex = 0
         while cursor < data.count - 2 && slotIndex < slotPositions.count {
-            // Slot header: 80 13 or 80 14
-            guard data[cursor] == 0x80 else {
+            // Slot header: 82 13 or 82 14
+            guard data[cursor] == 0x82 else {
                 cursor += 1
                 continue
             }
 
             let slotStart = cursor
 
-            // Find end of this slot (next 80 13/14 or end marker)
+            // Find end of this slot (next 82 13/14 or end marker)
             var slotEnd = cursor + 2
             while slotEnd < data.count - 1 {
-                if data[slotEnd] == 0x80 && (data[slotEnd + 1] == 0x13 || data[slotEnd + 1] == 0x14) {
+                if data[slotEnd] == 0x82 && (data[slotEnd + 1] == 0x13 || data[slotEnd + 1] == 0x14) {
                     break
                 }
                 if data[slotEnd] == 0x08 && data[slotEnd + 1] == 0x95 {
@@ -350,12 +391,14 @@ class PresetDataParser {
         var enabled = false
         var params: [String: Any] = [:]
 
-        guard slotData.count >= 4 else {
+        guard slotData.count >= 6 else {
             return PresetBlock(slot: position, modelName: modelName, type: type, enabled: enabled, params: params)
         }
 
-        // Check if empty slot (81 14 c0)
-        if slotData.contains(0x81) && slotData.contains(0x14) && slotData.contains(0xc0) {
+        // Empty slots are compact records like: 82 13 08 14 c0.
+        // Do not treat any slot containing c0 bytes as empty; c0 also appears inside
+        // normal float/parameter payloads.
+        if slotData.count <= 5 && slotData.last == 0xc0 {
             return PresetBlock(slot: position, modelName: "Empty", type: "None", enabled: false, params: params)
         }
 
@@ -366,32 +409,59 @@ class PresetDataParser {
             }
         }
 
-        // Extract model ID (look for pattern around 14 or 17 marker)
-        // This is a simplified extraction - full parsing would require
-        // the complete modules dictionary from the Python reference
-        if let modelMarker = slotData.firstIndex(of: 0x14) {
-            if modelMarker + 2 < slotData.count {
-                let modelId = String(format: "%02x%02x", slotData[modelMarker + 1], slotData[modelMarker + 2])
-                modelName = modelIdToName(modelId)
-
-                // Determine type based on slot position and content
-                if position.starts(with: "A") {
-                    type = "Effect"
-                } else {
-                    type = "Effect"
+        // Extract model ID - look for 82 05 pattern (module ID marker in Helix protocol)
+        // The pattern is: 82 13 [slot_num] 14 [model_id_hi] [model_id_lo] ...
+        for i in 0..<slotData.count - 4 {
+            if slotData[i] == 0x14 {
+                let modelIdHi = slotData[i + 1]
+                let modelIdLo = slotData[i + 2]
+                // Model IDs are typically in range 0x01-0x99
+                if modelIdHi >= 0x01 && modelIdHi <= 0x99 && modelIdLo <= 0x99 {
+                    let modelId = String(format: "%02x%02x", modelIdHi, modelIdLo)
+                    modelName = modelIdToName(modelId)
+                    params["modelId"] = modelId
+                    break
                 }
             }
         }
 
-        // Try to extract parameters
-        // Look for parameter markers (typically starting with 0x07)
-        if let paramMarker = slotData.firstIndex(of: 0x07) {
-            if paramMarker + 5 < slotData.count {
-                // Simplified parameter extraction
-                // Full implementation would parse IEEE 754 floats
-                let paramCount = Int(slotData[paramMarker + 2])
-                params["paramCount"] = paramCount
+        // Try to extract parameters.
+        // Look for the first 83 02 pair; many slots also contain other 83 markers
+        // such as 83 17, so firstIndex(of: 0x83) is not specific enough.
+        if let paramMarker = find([0x83, 0x02], in: slotData, startingAt: 0) {
+            let paramStart = paramMarker + 2
+            var values: [Double] = []
+            var cursor = paramStart
+
+            while cursor < slotData.count {
+                if cursor + 4 < slotData.count && slotData[cursor] == 0xca {
+                    let floatBytes = slotData[cursor + 1..<cursor + 5]
+                    values.append(Double(self.ieee754ToFloat(Array(floatBytes))))
+                    cursor += 5
+                } else if slotData[cursor] == 0xc2 {
+                    values.append(0.0)
+                    cursor += 1
+                } else if slotData[cursor] == 0xc3 {
+                    values.append(1.0)
+                    cursor += 1
+                } else if slotData[cursor] == 0x90 {
+                    break
+                } else {
+                    cursor += 1
+                }
             }
+
+            if !values.isEmpty {
+                params["values"] = values
+                params["paramCount"] = values.count
+            }
+        }
+
+        // Determine type based on slot position
+        if position.starts(with: "A") {
+            type = "Effect"
+        } else {
+            type = "Effect"
         }
 
         return PresetBlock(slot: position, modelName: modelName, type: type, enabled: enabled, params: params)

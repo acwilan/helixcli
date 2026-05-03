@@ -702,6 +702,8 @@ final class USBManager {
             var presetData: [UInt8] = []
             var timeouts = 0
             var packetCounter: UInt16 = 0x001e
+            var consecutiveNonData = 0
+            var dataPhaseStarted = false
 
             // Send the preset data request
             try write("request-preset-data", [0x19, 0x00, 0x00, 0x18, 0x80, 0x10, 0xed, 0x03, 0x00, -1, 0x00, 0x0c, Int(sessionNo), Int(packetDouble[0]), Int(packetDouble[1]), 0x00, 0x01, 0x00, 0x06, 0x00, 0x09, 0x00, 0x00, 0x00, 0x83, 0x66, 0xcd, 0x03, Int(requestSessionId), 0x64, 0x16, 0x65, 0xc0, 0x00, 0x00, 0x00])
@@ -717,35 +719,40 @@ final class USBManager {
                 timeouts = 0
 
                 for frame in frames {
-                    // Check if this is a data packet on stream x80 (response from device)
-                    // Pattern: [length bytes] 0x18 0xed 0x03 0x80 0x10 ...
-                    if frame.count >= 16 &&
-                       frame[3] == 0x18 &&
-                       frame[4] == 0xed && frame[5] == 0x03 &&
-                       frame[6] == 0x80 && frame[7] == 0x10 {
+                    // Check if this is a data packet from the device
+                    // The device sends preset data as multiple packets on stream x80
+                    // Data packets have pos11 == 0x04 or 0x08 (not 16-byte ACKs which have pos11 == 0x10)
+                    // NOTE: We check frame.count > 16 to identify packets with payload data.
+                    // The device sends packets in small chunks; we capture ALL of them.
+                    if frame.count > 16 && (frame[11] == 0x04 || frame[11] == 0x08) {
+                        dataPhaseStarted = true
+                        consecutiveNonData = 0
+                    } else if dataPhaseStarted {
+                        consecutiveNonData += 1
+                        if consecutiveNonData >= 3 { break }
+                    }
 
-                        // Skip first 16 bytes (protocol header) and capture payload
+                    // Capture payload from ANY frame that has data beyond the 16-byte header
+                    // This ensures we collect data from all packets, even small chunks
+                    if frame.count > 16 {
                         let payload = Array(frame.dropFirst(16))
                         presetData.append(contentsOf: payload)
-                        packets.append(frame)
-                        totalBytes += frame.count
+                    }
+                    packets.append(frame)
+                    totalBytes += frame.count
 
-                        // Check if this is the end packet (length byte at position 1 == 0x02)
-                        let isEndPacket = frame[1] == 0x02
-
-                        // Send ACK for every packet (except first which we skip per Python)
+                    // Send ACK for data packets (pos11 == 0x04 or 0x08)
+                    // Skip ACK for first packet (per Python reference)
+                    if frame.count > 16 && (frame[11] == 0x04 || frame[11] == 0x08) {
                         if packets.count > 1 {
                             let nextPacketDoubleLow = UInt8(packetCounter & 0xFF)
                             let nextPacketDoubleHigh = UInt8((packetCounter >> 8) & 0xFF)
                             try write("ack-preset-data", [0x08, 0x00, 0x00, 0x18, 0x80, 0x10, 0xed, 0x03, 0x00, -1, 0x00, 0x08, Int(sessionNo), Int(nextPacketDoubleLow), Int(nextPacketDoubleHigh), 0x00])
                         }
                         packetCounter += 1
-
-                        if isEndPacket {
-                            break
-                        }
                     }
                 }
+                if consecutiveNonData >= 3 { break }
             }
 
             return [
