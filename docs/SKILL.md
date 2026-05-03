@@ -50,6 +50,9 @@ helixcli preset switch <ID>
 # Get current preset details including partially parsed effect blocks
 # Caveat: --id is currently informational; this reads current preset data.
 helixcli preset get --id <ID> --timeout 500 --max-packets 120
+
+# Parse a captured preset payload fixture without connecting to USB
+helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
 ```
 
 ### Snapshot Management
@@ -143,11 +146,12 @@ Error format:
 
 1. **Always check current state first** - Don't assume what's loaded
 2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` includes `displayValue`, but labels/units/scaling are conservative and not fully verified yet
-3. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
-4. **Make incremental suggestions** - Don't change everything at once
-5. **Explain changes** - Tell the user what you're adjusting and why
-6. **Confirm before applying** - Especially for live performance scenarios
-7. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
+3. **Use fixtures for parser work** - Run `scripts/verify_fixtures.py` after parser/catalog changes
+4. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
+5. **Make incremental suggestions** - Don't change everything at once
+6. **Explain changes** - Tell the user what you're adjusting and why
+7. **Confirm before applying** - Especially for live performance scenarios
+8. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
 
 ## Safety
 

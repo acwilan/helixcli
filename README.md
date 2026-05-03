@@ -17,7 +17,7 @@ Core preset control is working against real HX Stomp hardware:
 
 Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
 
-See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes.
+See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes. Parser regression fixtures live in [`docs/fixtures/`](docs/fixtures/) and can be checked with `scripts/verify_fixtures.py`.
 
 ## Installation
 
@@ -58,6 +58,9 @@ helixcli preset switch 12
 
 # Get preset details
 helixcli preset get --id 5
+
+# Parse a captured preset payload without USB hardware
+helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
 ```
 
 ### Snapshot Management

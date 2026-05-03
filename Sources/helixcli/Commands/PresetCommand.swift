@@ -10,6 +10,7 @@ struct PresetCommand: ParsableCommand {
             CurrentPreset.self,
             SwitchPreset.self,
             GetPreset.self,
+            ParsePresetFixture.self,
         ]
     )
 }
@@ -110,6 +111,38 @@ struct SwitchPreset: ParsableCommand {
     }
 }
 
+private enum PresetResponseSupport {
+    static func responseData(for presetInfo: PresetInfo, presetId: Int?, rawPayloadHex: String? = nil, packetCount: Any? = nil, totalBytes: Any? = nil) -> [String: Any] {
+        var responseData: [String: Any] = [
+            "presetId": presetId as Any,
+            "name": presetInfo.name,
+            "currentSnapshot": presetInfo.currentSnapshot,
+            "blockCount": presetInfo.blocks.count,
+            "blocks": presetInfo.blocks.map { block in
+                [
+                    "slot": block.slot,
+                    "modelName": block.modelName,
+                    "type": block.type,
+                    "enabled": block.enabled,
+                    "params": block.params,
+                ]
+            },
+        ]
+
+        if let rawPayloadHex {
+            responseData["rawPayloadHex"] = rawPayloadHex
+        }
+        if let packetCount {
+            responseData["packetCount"] = packetCount
+        }
+        if let totalBytes {
+            responseData["totalBytes"] = totalBytes
+        }
+
+        return responseData
+    }
+}
+
 struct GetPreset: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
@@ -144,37 +177,52 @@ struct GetPreset: ParsableCommand {
                 return
             }
 
-            // Parse the preset data
             let parser = PresetDataParser(hexString: payloadHex)
             let presetInfo = parser.parse()
-
-            var responseData: [String: Any] = [
-                "presetId": id as Any,
-                "name": presetInfo.name,
-                "currentSnapshot": presetInfo.currentSnapshot,
-                "blockCount": presetInfo.blocks.count,
-                "blocks": presetInfo.blocks.map { block in
-                    [
-                        "slot": block.slot,
-                        "modelName": block.modelName,
-                        "type": block.type,
-                        "enabled": block.enabled,
-                        "params": block.params
-                    ]
-                }
-            ]
-
-            if verbose {
-                responseData["rawPayloadHex"] = payloadHex
-                responseData["packetCount"] = result["packetCount"] as Any
-                responseData["totalBytes"] = result["totalBytes"] as Any
-            }
+            let responseData = PresetResponseSupport.responseData(
+                for: presetInfo,
+                presetId: id,
+                rawPayloadHex: verbose ? payloadHex : nil,
+                packetCount: verbose ? result["packetCount"] : nil,
+                totalBytes: verbose ? result["totalBytes"] : nil
+            )
 
             print(JSONResponse.success(data: responseData).toJSON())
         } catch USBError.deviceNotFound {
             print(JSONResponse.deviceNotFound().toJSON())
         } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
             print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
+struct ParsePresetFixture: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "parse-fixture",
+        abstract: "Parse a preset payload fixture from a hex file without connecting to USB"
+    )
+
+    @Argument(help: "Path to a preset payload hex fixture")
+    var path: String
+
+    @Flag(name: .shortAndLong, help: "Include full raw fixture data")
+    var verbose = false
+
+    func run() throws {
+        do {
+            let url = URL(fileURLWithPath: path)
+            let payloadHex = try String(contentsOf: url, encoding: .utf8)
+            let presetInfo = PresetDataParser(hexString: payloadHex).parse()
+            let responseData = PresetResponseSupport.responseData(
+                for: presetInfo,
+                presetId: nil,
+                rawPayloadHex: verbose ? payloadHex.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
+                packetCount: nil,
+                totalBytes: nil
+            )
+            print(JSONResponse.success(data: responseData).toJSON())
+        } catch {
+            print(JSONResponse.failure(code: "FIXTURE_ERROR", message: error.localizedDescription).toJSON())
         }
     }
 }

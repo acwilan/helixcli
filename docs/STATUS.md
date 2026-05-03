@@ -64,6 +64,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 | `helixcli preset current` | Working | Reads current preset name, e.g. `GospelTone CLN`. |
 | `helixcli preset switch <id>` | Working | Uses USB-MIDI Program Change on interface 4. Valid IDs currently 0-125. |
 | `helixcli preset get --id <id>` | Partially working | Captures and parses current preset data. The `id` argument is not yet used to fetch arbitrary preset storage. |
+| `helixcli preset parse-fixture <path>` | Working offline diagnostic | Parses a raw preset payload hex fixture without USB access; useful for parser regression checks. |
 
 ### Snapshot Commands
 
@@ -124,6 +125,8 @@ swift run helixcli preset switch 0
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
 swift run helixcli block get A3 --timeout 500 --max-packets 120
+swift run helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
+scripts/verify_fixtures.py
 ```
 
 Representative verified behavior:
@@ -167,7 +170,7 @@ Current quick read:
 
 ### Productization
 
-10. Add unit tests for parsers using captured fixture payloads.
+10. Expand fixture regression coverage with more captured preset payloads and exact expected values.
 11. Add integration-test notes that require attached hardware.
 12. Add GitHub Actions CI.
 13. Finalize Homebrew tap/release workflow.
