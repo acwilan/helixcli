@@ -56,7 +56,10 @@ helixcli preset current
 # Switch to preset
 helixcli preset switch 12
 
-# Get preset details
+# Get currently loaded preset details
+helixcli preset get-current
+
+# Deprecated compatibility alias; reads current preset only, --id is informational
 helixcli preset get --id 5
 
 # Parse a captured preset payload without USB hardware

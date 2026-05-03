@@ -27,7 +27,7 @@ The script currently benchmarks:
 |---|---|---|
 | Current preset name | `helixcli preset current --timeout 500` | interactive command `0` |
 | Preset names/list | `helixcli preset list --timeout 250 --max-packets 120` | interactive command `2` |
-| Current preset data | `helixcli preset get --id 0 --timeout 500 --max-packets 120` | interactive command `1` |
+| Current preset data | `helixcli preset get-current --timeout 500 --max-packets 120` | interactive command `1` |
 
 ## Preliminary helixcli Numbers
 
@@ -36,7 +36,7 @@ Using the release binary, successful non-outlier calls were roughly:
 | Command | Typical latency observed |
 |---|---:|
 | `preset current` | ~0.6-0.8s |
-| `preset get --id 0` | ~0.85-1.0s |
+| `preset get-current` | ~0.85-1.0s |
 | `preset list` | sometimes ~0.5s, but often ~31s |
 
 Important: these are preliminary and noisy. Repeated independent process invocations sometimes hit long waits:

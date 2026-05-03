@@ -63,7 +63,8 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 | `helixcli preset list` | Working | Reads 125 preset names from hardware. |
 | `helixcli preset current` | Working | Reads current preset name, e.g. `GospelTone CLN`. |
 | `helixcli preset switch <id>` | Working | Uses USB-MIDI Program Change on interface 4. Valid IDs currently 0-125. |
-| `helixcli preset get --id <id>` | Partially working | Captures and parses current preset data. The `id` argument is not yet used to fetch arbitrary preset storage. |
+| `helixcli preset get-current` | Working | Captures and parses the currently loaded preset data. |
+| `helixcli preset get --id <id>` | Deprecated alias | Reads current preset only and returns a warning; arbitrary preset reads by ID are not implemented yet. |
 | `helixcli preset parse-fixture <path>` | Working offline diagnostic | Parses a raw preset payload hex fixture without USB access; useful for parser regression checks. |
 
 ### Snapshot Commands
@@ -92,7 +93,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 
 ### Working
 
-`preset get --id 0 --timeout 500 --max-packets 120` returns a successful JSON response with:
+`preset get-current --timeout 500 --max-packets 120` returns a successful JSON response with:
 
 - `blockCount: 16`
 - slots `A1` through `A8`, `B1` through `B8`
@@ -108,7 +109,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 - Parameter labels exist for common categories and the current preset's known models (`US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, dual cabs), but they are first-pass and need validation against HX Edit/manuals.
 - Display scaling is conservative and marked by `displayKind` (`normalized-0-10`, `percent`, `frequency`, `boolean`, `raw`, etc.). It is useful for agent summaries but not yet a substitute for exact HX Edit display values.
 - Some parsed numeric values still need semantic decoding/scaling; suspicious values intentionally fall back to `raw` instead of over-formatting.
-- `preset get --id` currently reads current preset data, not arbitrary preset data by ID.
+- `preset get --id` is deprecated and intentionally warns that it reads current preset data, not arbitrary preset data by ID.
 - Snapshot names/settings are visible in raw payload sections but not parsed into structured snapshot data yet.
 
 ## Verified Commands
@@ -122,6 +123,7 @@ swift run helixcli preset list --timeout 250 --max-packets 120
 swift run helixcli preset current --timeout 500
 swift run helixcli preset switch 1
 swift run helixcli preset switch 0
+swift run helixcli preset get-current --timeout 500 --max-packets 120
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
 swift run helixcli block get A3 --timeout 500 --max-packets 120
@@ -135,7 +137,8 @@ Representative verified behavior:
 - After switching to preset `1`, `preset current` returned `Full Dist`.
 - Switching back to preset `0` restored `GospelTone CLN`.
 - `preset list` decoded all 125 preset names.
-- `preset get --id 0` returned 16 blocks and parsed parameter values.
+- `preset get-current` returned 16 blocks and parsed parameter values.
+- `preset get --id 0` returned a deprecated/current-preset warning instead of implying arbitrary preset reads.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
 - `block get A3` returned the current amp block as `US Double Nrm (mono)` with named/display parameters including `Drive` = `3.8`, `Bass` = `4.4`, `Mid` = `5.2`, `Treble` = `5.0`, `Presence` = `5.0`, `Ch Vol` = `5.0`, `Master` = `6.0`, and `Sag` = `5.0`.
 
@@ -145,7 +148,7 @@ Preliminary latency notes and the comparison plan against `helix_usb` are docume
 
 Current quick read:
 
-- `helixcli preset current` and `preset get --id 0` can complete around ~0.6-1.0s with the release binary.
+- `helixcli preset current` and `preset get-current` can complete around ~0.6-1.0s with the release binary.
 - Tail latency is not stable yet; some independent command runs waited ~30-60s.
 - Automated `helix_usb` benchmarking needs more work because the Python interactive session did not settle cleanly under `pexpect` during the first attempt.
 
@@ -153,12 +156,10 @@ Current quick read:
 
 ### Highest Priority
 
-1. Clarify `preset get --id` semantics:
-   - Either implement true arbitrary preset reads by ID, or
-   - Rename/scope it to something like `preset get-current` until arbitrary reads are known.
+1. Implement true arbitrary preset reads by ID when the protocol is known.
 2. Expand/verify model ID mapping edge cases beyond the imported `helix_usb` catalog.
 3. Validate first-pass parameter-name mappings and replace conservative display scaling with exact HX Stomp display values where possible.
-4. Extract preset name from full preset data, or combine `preset current` with `preset get` when reading current preset.
+4. Extract preset name from full preset data, or combine `preset current` with `preset get-current` when reading current preset.
 
 ### Protocol / Feature Work
 

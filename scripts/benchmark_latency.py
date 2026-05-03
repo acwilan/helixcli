@@ -4,7 +4,7 @@
 This script uses safe/read-mostly operations by default:
 - helixcli preset current
 - helixcli preset list
-- helixcli preset get --id 0
+- helixcli preset get-current
 - helix_usb interactive commands 0, 2, 1 respectively
 
 It intentionally does not benchmark preset switching unless extended manually.
@@ -144,7 +144,7 @@ def main() -> int:
     helixcli_cases = {
         "helixcli_current": ["preset", "current", "--timeout", "500"],
         "helixcli_preset_list": ["preset", "list", "--timeout", "250", "--max-packets", "120"],
-        "helixcli_preset_get": ["preset", "get", "--id", "0", "--timeout", "500", "--max-packets", "120"],
+        "helixcli_preset_get_current": ["preset", "get-current", "--timeout", "500", "--max-packets", "120"],
     }
 
     for name, cmd in helixcli_cases.items():

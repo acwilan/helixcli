@@ -48,7 +48,9 @@ helixcli preset current
 helixcli preset switch <ID>
 
 # Get current preset details including partially parsed effect blocks
-# Caveat: --id is currently informational; this reads current preset data.
+helixcli preset get-current --timeout 500 --max-packets 120
+
+# Deprecated compatibility alias: --id is informational; this reads current preset data.
 helixcli preset get --id <ID> --timeout 500 --max-packets 120
 
 # Parse a captured preset payload fixture without connecting to USB
@@ -166,7 +168,7 @@ Error format:
 
 ```bash
 helixcli preset current --timeout 500
-helixcli preset get --id 0 --timeout 500 --max-packets 120
+helixcli preset get-current --timeout 500 --max-packets 120
 ```
 
 ### Switch Presets

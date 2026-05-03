@@ -42,6 +42,8 @@ def main() -> int:
     by_slot = {block["slot"]: block for block in blocks}
 
     require(data["blockCount"] == 16, f"expected 16 blocks, got {data['blockCount']}")
+    require(data["source"] == "currentPreset", f"unexpected source: {data.get('source')}")
+    require(data["requestedPresetId"] is None, f"unexpected requested preset id: {data.get('requestedPresetId')}")
 
     amp = by_slot["A3"]
     require(amp["modelName"] == "US Double Nrm (mono)", f"unexpected A3 model: {amp['modelName']}")

@@ -9,6 +9,7 @@ struct PresetCommand: ParsableCommand {
             ListPresets.self,
             CurrentPreset.self,
             SwitchPreset.self,
+            GetCurrentPreset.self,
             GetPreset.self,
             ParsePresetFixture.self,
         ]
@@ -49,7 +50,7 @@ struct ListPresets: ParsableCommand {
 struct CurrentPreset: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "current",
-        abstract: "Get current preset"
+        abstract: "Get current preset name"
     )
     
     @Option(help: "USB read/write timeout in milliseconds")
@@ -112,9 +113,10 @@ struct SwitchPreset: ParsableCommand {
 }
 
 private enum PresetResponseSupport {
-    static func responseData(for presetInfo: PresetInfo, presetId: Int?, rawPayloadHex: String? = nil, packetCount: Any? = nil, totalBytes: Any? = nil) -> [String: Any] {
+    static func responseData(for presetInfo: PresetInfo, requestedPresetId: Int?, rawPayloadHex: String? = nil, packetCount: Any? = nil, totalBytes: Any? = nil) -> [String: Any] {
         var responseData: [String: Any] = [
-            "presetId": presetId as Any,
+            "requestedPresetId": requestedPresetId as Any,
+            "source": "currentPreset",
             "name": presetInfo.name,
             "currentSnapshot": presetInfo.currentSnapshot,
             "blockCount": presetInfo.blocks.count,
@@ -143,13 +145,65 @@ private enum PresetResponseSupport {
     }
 }
 
+private enum CurrentPresetDataReader {
+    static func read(timeout: UInt32, maxPackets: Int, verbose: Bool, requestedPresetId: Int?) throws -> [String: Any] {
+        let manager = USBManager()
+        let result = try manager.requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
+
+        guard let connected = result["connected"] as? Bool, connected else {
+            throw USBError.connectionFailed("Failed to connect to HX Stomp")
+        }
+
+        guard let payloadHex = result["payloadHex"] as? String, !payloadHex.isEmpty else {
+            throw USBError.invalidResponse("No preset data received from device")
+        }
+
+        let parser = PresetDataParser(hexString: payloadHex)
+        let presetInfo = parser.parse()
+        return PresetResponseSupport.responseData(
+            for: presetInfo,
+            requestedPresetId: requestedPresetId,
+            rawPayloadHex: verbose ? payloadHex : nil,
+            packetCount: verbose ? result["packetCount"] : nil,
+            totalBytes: verbose ? result["totalBytes"] : nil
+        )
+    }
+}
+
+struct GetCurrentPreset: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "get-current",
+        abstract: "Get details for the currently loaded preset"
+    )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets to read")
+    var maxPackets: Int = 200
+
+    @Flag(name: .shortAndLong, help: "Include full raw data")
+    var verbose = false
+
+    func run() throws {
+        do {
+            let responseData = try CurrentPresetDataReader.read(timeout: timeout, maxPackets: maxPackets, verbose: verbose, requestedPresetId: nil)
+            print(JSONResponse.success(data: responseData).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
 struct GetPreset: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "get",
-        abstract: "Get preset details with blocks and parameters"
+        abstract: "Deprecated alias for get-current; arbitrary preset reads are not implemented yet"
     )
 
-    @Option(help: "Preset ID (0-125). If not provided, gets current preset")
+    @Option(help: "Requested preset ID (0-125). Warning: currently ignored; reads current preset")
     var id: Int?
 
     @Option(help: "USB read/write timeout in milliseconds")
@@ -162,35 +216,14 @@ struct GetPreset: ParsableCommand {
     var verbose = false
 
     func run() throws {
-        let manager = USBManager()
         do {
-            // Get the preset data
-            let result = try manager.requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: verbose)
-
-            guard let connected = result["connected"] as? Bool, connected else {
-                print(JSONResponse.failure(code: "NOT_CONNECTED", message: "Failed to connect to HX Stomp").toJSON())
-                return
-            }
-
-            guard let payloadHex = result["payloadHex"] as? String, !payloadHex.isEmpty else {
-                print(JSONResponse.failure(code: "NO_DATA", message: "No preset data received from device").toJSON())
-                return
-            }
-
-            let parser = PresetDataParser(hexString: payloadHex)
-            let presetInfo = parser.parse()
-            let responseData = PresetResponseSupport.responseData(
-                for: presetInfo,
-                presetId: id,
-                rawPayloadHex: verbose ? payloadHex : nil,
-                packetCount: verbose ? result["packetCount"] : nil,
-                totalBytes: verbose ? result["totalBytes"] : nil
-            )
-
+            var responseData = try CurrentPresetDataReader.read(timeout: timeout, maxPackets: maxPackets, verbose: verbose, requestedPresetId: id)
+            responseData["deprecated"] = true
+            responseData["warning"] = "preset get is deprecated and reads the current preset only; use preset get-current. Arbitrary preset reads by ID are not implemented yet."
             print(JSONResponse.success(data: responseData).toJSON())
         } catch USBError.deviceNotFound {
             print(JSONResponse.deviceNotFound().toJSON())
-        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message) {
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message), USBError.invalidResponse(let message) {
             print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
         }
     }
@@ -215,7 +248,7 @@ struct ParsePresetFixture: ParsableCommand {
             let presetInfo = PresetDataParser(hexString: payloadHex).parse()
             let responseData = PresetResponseSupport.responseData(
                 for: presetInfo,
-                presetId: nil,
+                requestedPresetId: nil,
                 rawPayloadHex: verbose ? payloadHex.trimmingCharacters(in: .whitespacesAndNewlines) : nil,
                 packetCount: nil,
                 totalBytes: nil
