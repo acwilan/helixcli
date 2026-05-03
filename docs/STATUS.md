@@ -13,7 +13,7 @@ Last verified: 2026-05-02 against Andres's Line 6 HX Stomp (`0x0E41:0x4246`, ser
 - The current preset name can be read.
 - Preset switching works through the HX Stomp USB MIDI interface.
 - Raw current-preset data can be captured.
-- Initial block/parameter parsing works with human-readable model/category mapping for known model IDs, but parameters are still unlabeled numeric values.
+- Initial block/parameter parsing works with human-readable model/category mapping for known model IDs, plus first-pass parameter labels for common/current-preset models. Parameter units/display scaling are still experimental.
 
 The remaining work is mostly parser quality and advanced write operations.
 
@@ -98,12 +98,14 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 - enabled/disabled booleans for several blocks
 - raw model IDs like `8205`, `8518`, `8206`, `830e`
 - numeric parameter values parsed from `0xca` IEEE-754 floats plus boolean markers `0xc2`/`0xc3`
+- `namedValues` entries with `index`, first-pass `name`, and raw parsed `value`
 
 ### Known Parser Gaps
 
 - Preset name from full preset data still returns `Unknown`; use `preset current` for the current preset name.
 - Known model IDs are mapped through the `helix_usb` module catalog, including categories like Amp, Cab, Dynamic, Delay, Modulation, etc.
-- Parameters are unlabeled numeric arrays; there is no mapping yet to parameter names, units, ranges, or display values.
+- Parameter labels exist for common categories and the current preset's known models (`US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, dual cabs), but they are first-pass and need validation against HX Edit/manuals.
+- Parameter units, ranges, and display scaling are not implemented yet; values remain raw parsed numbers/booleans.
 - Some parsed numeric values likely need semantic decoding/scaling.
 - `preset get --id` currently reads current preset data, not arbitrary preset data by ID.
 - Snapshot names/settings are visible in raw payload sections but not parsed into structured snapshot data yet.
@@ -132,7 +134,7 @@ Representative verified behavior:
 - `preset list` decoded all 125 preset names.
 - `preset get --id 0` returned 16 blocks and parsed parameter values.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
-- `block get A3` returned the current amp block as `US Double Nrm (mono)`.
+- `block get A3` returned the current amp block as `US Double Nrm (mono)` with named parameters including `Drive`, `Bass`, `Mid`, `Treble`, `Presence`, `Ch Vol`, `Master`, and `Sag`.
 
 ## Latency / Benchmarking
 
@@ -152,7 +154,7 @@ Current quick read:
    - Either implement true arbitrary preset reads by ID, or
    - Rename/scope it to something like `preset get-current` until arbitrary reads are known.
 2. Expand/verify model ID mapping edge cases beyond the imported `helix_usb` catalog.
-3. Map parameter positions to names, units, display ranges, and actual HX Stomp values.
+3. Validate first-pass parameter-name mappings and add units, display ranges, and actual HX Stomp display values.
 4. Extract preset name from full preset data, or combine `preset current` with `preset get` when reading current preset.
 
 ### Protocol / Feature Work

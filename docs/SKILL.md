@@ -12,13 +12,13 @@ Currently verified:
 - Reading the current preset name
 - Switching presets
 - Capturing and partially parsing current-preset block/parameter data
-- Read-only `block list` and `block get <slot>` inspection with model/category names
+- Read-only `block list` and `block get <slot>` inspection with model/category names and first-pass `namedValues` parameter labels
 
 Not yet implemented:
 - Snapshot list/switch against hardware
 - Block toggle/write operations
 - Block parameter writes
-- Human-readable parameter mappings
+- Fully verified human-readable parameter mappings, units, ranges, and display scaling
 - Tuner data
 
 See `docs/STATUS.md` for the detailed status matrix.
@@ -142,7 +142,7 @@ Error format:
 ## Tips for Agents
 
 1. **Always check current state first** - Don't assume what's loaded
-2. **Treat parsed block data as experimental** - Model names/categories are mapped, but parameter arrays are not fully mapped yet
+2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` labels exist, but parameter labels/units/scaling are not fully verified yet
 3. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
 4. **Make incremental suggestions** - Don't change everything at once
 5. **Explain changes** - Tell the user what you're adjusting and why

@@ -466,6 +466,7 @@ class PresetDataParser {
             if !values.isEmpty {
                 params["values"] = values
                 params["paramCount"] = values.count
+                params["namedValues"] = HelixParameterCatalog.namedValues(for: values, modelIds: modelIds, category: type).map(\.json)
             }
         }
 
