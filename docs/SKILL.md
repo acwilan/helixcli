@@ -4,11 +4,23 @@ Control Line 6 HX Stomp guitar processors via `helixcli` command.
 
 ## Overview
 
-This skill enables OpenClaw agents to interact with HX Stomp guitar pedals, allowing:
-- Reading current preset and effect chain
-- Switching presets and snapshots
-- Adjusting effect block parameters
-- Collaborative tone crafting with users
+This skill enables OpenClaw agents to interact with HX Stomp guitar pedals.
+
+Currently verified:
+- Detecting the connected HX Stomp
+- Listing presets
+- Reading the current preset name
+- Switching presets
+- Capturing and partially parsing current-preset block/parameter data
+
+Not yet implemented:
+- Snapshot list/switch against hardware
+- Block toggle/write operations
+- Block parameter writes
+- Human-readable model/parameter mappings
+- Tuner data
+
+See `docs/STATUS.md` for the detailed status matrix.
 
 ## Prerequisites
 
@@ -34,34 +46,35 @@ helixcli preset current
 # Switch to preset by ID (0-127)
 helixcli preset switch <ID>
 
-# Get preset details including effect blocks
-helixcli preset get --id <ID>
+# Get current preset details including partially parsed effect blocks
+# Caveat: --id is currently informational; this reads current preset data.
+helixcli preset get --id <ID> --timeout 500 --max-packets 120
 ```
 
 ### Snapshot Management
 
-```bash
-# List snapshots in current preset
-helixcli snapshot list
+These commands are currently stubs and should not be relied on for live control yet:
 
-# Switch to snapshot (1-3)
+```bash
+helixcli snapshot list
 helixcli snapshot switch <ID>
 ```
 
 ### Effect Block Control
 
+These commands are currently stubs and should not be used as if they apply changes yet:
+
 ```bash
-# List all blocks in current preset
 helixcli block list
-
-# Toggle block on/off
 helixcli block toggle <SLOT>
-
-# Set block parameter
 helixcli block param <SLOT> <PARAM> <VALUE>
-
-# Get block details
 helixcli block get <SLOT>
+```
+
+For read-only inspection, use:
+
+```bash
+helixcli preset get --id 0 --timeout 500 --max-packets 120
 ```
 
 ## Agent Workflow
@@ -128,50 +141,50 @@ Error format:
 ## Tips for Agents
 
 1. **Always check current state first** - Don't assume what's loaded
-2. **Make incremental suggestions** - Don't change everything at once
-3. **Explain changes** - Tell the user what you're adjusting and why
-4. **Confirm before applying** - Especially for live performance scenarios
-5. **Handle errors gracefully** - Device might not be connected
+2. **Treat parsed block data as experimental** - Model IDs and parameter arrays are not fully mapped yet
+3. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
+4. **Make incremental suggestions** - Don't change everything at once
+5. **Explain changes** - Tell the user what you're adjusting and why
+6. **Confirm before applying** - Especially for live performance scenarios
+7. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
 
 ## Safety
 
-- HX Stomp stores up to 128 presets - switching is safe
-- Changes are immediate - warn user if audio is audible
-- No permanent damage risk from parameter changes
+- Preset switching is working and immediate - warn user if audio is audible
+- Avoid routine `helixcli device reset`; live testing showed it can require a power-cycle
+- Avoid repeated `helixcli device ping` in one powered-on session; use higher-level commands instead
+- Block/snapshot/parameter writes are not implemented yet
 
 ## Examples
 
-### Clean Tone with Delay
+### Read Current State
 
 ```bash
-# Read current
-helixcli preset current
-
-# Ensure reverb and delay are enabled
-helixcli block toggle C  # Delay
-helixcli block toggle D  # Reverb
-
-# Set delay time (in ms)
-helixcli block param C time 350
-
-# Set reverb decay
-helixcli block param D decay 45
+helixcli preset current --timeout 500
+helixcli preset get --id 0 --timeout 500 --max-packets 120
 ```
 
-### High-Gain Lead
+### Switch Presets
 
 ```bash
-# Switch to high-gain preset
+# Switch to preset 12
 helixcli preset switch 12
 
-# Boost with overdrive
-helixcli block param A drive 8
-helixcli block param A level 7
-
-# Add delay for leads
-helixcli block toggle C
-helixcli block param C mix 25
+# Confirm the active preset after switching
+helixcli preset current --timeout 500
 ```
+
+### Future Block-Write Workflow
+
+Block writes are not implemented yet. When they are, the intended workflow is:
+
+1. Read current preset/block state.
+2. Suggest a small change.
+3. Ask the user for confirmation.
+4. Apply one block toggle/parameter change.
+5. Read back state if possible.
+
+Do not use `helixcli block toggle` or `helixcli block param` for real control until those commands are implemented and verified.
 
 ## Troubleshooting
 

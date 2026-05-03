@@ -2,6 +2,21 @@
 
 A native macOS command-line tool for controlling Line 6 HX Stomp guitar processors via USB.
 
+## Current Status
+
+Core preset control is working against real HX Stomp hardware:
+
+- device detection and USB topology inspection
+- proprietary protocol handshake
+- preset list/current read
+- preset switching via USB MIDI
+- current-preset raw data capture
+- initial block/parameter parsing
+
+Still missing: human-readable model/parameter mappings, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
+
+See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix.
+
 ## Installation
 
 ### Homebrew (Recommended)
@@ -16,6 +31,7 @@ brew install helixcli
 Requirements:
 - macOS 14+
 - Swift 6.0+
+- libusb (`brew install libusb`)
 
 ```bash
 git clone https://github.com/acwilan/helixcli.git
@@ -44,30 +60,24 @@ helixcli preset get --id 5
 
 ### Snapshot Management
 
-```bash
-# List snapshots
-helixcli snapshot list
+Snapshot commands exist but are currently stubs:
 
-# Switch snapshot
+```bash
+helixcli snapshot list
 helixcli snapshot switch 2
 ```
 
 ### Block Control
 
+Block commands exist but are currently stubs. For now, use `preset get` to inspect initial parsed block data from the current preset:
+
 ```bash
-# List blocks
-helixcli block list
-
-# Toggle block
-helixcli block toggle A
-
-# Set parameter
-helixcli block param A gain 7.5
+helixcli preset get --id 0 --timeout 500 --max-packets 120
 ```
 
 ## OpenClaw Integration
 
-See [HELIXCLI.md](https://github.com/acwilan/helixcli/blob/main/docs/OPENCLAW.md) for agent configuration.
+See [`docs/SKILL.md`](docs/SKILL.md) for agent guidance and [`docs/STATUS.md`](docs/STATUS.md) for the current implementation status.
 
 ## License
 
