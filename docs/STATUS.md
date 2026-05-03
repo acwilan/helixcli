@@ -13,7 +13,7 @@ Last verified: 2026-05-02 against Andres's Line 6 HX Stomp (`0x0E41:0x4246`, ser
 - The current preset name can be read.
 - Preset switching works through the HX Stomp USB MIDI interface.
 - Raw current-preset data can be captured.
-- Initial block/parameter parsing works, but still returns raw model IDs and unlabeled numeric parameters.
+- Initial block/parameter parsing works with human-readable model/category mapping for known model IDs, but parameters are still unlabeled numeric values.
 
 The remaining work is mostly parser quality and advanced write operations.
 
@@ -76,9 +76,9 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 
 | Command | Status | Notes |
 |---|---|---|
-| `helixcli block list` | Stub | Placeholder only. Similar data is currently available through `preset get`. |
-| `helixcli block get <slot>` | Stub | Placeholder only. |
-| `helixcli block toggle <slot>` | Stub | Placeholder only. |
+| `helixcli block list` | Working read-only | Reads current preset data and returns parsed non-empty blocks. Use `--include-empty` to include all slots. |
+| `helixcli block get <slot>` | Working read-only | Reads current preset data and returns one parsed slot, e.g. `A3`. |
+| `helixcli block toggle <slot>` | Stub | Placeholder only; no write is sent. |
 | `helixcli block param <slot> <param> <value>` | Stub | Placeholder only. |
 
 ### Tuner
@@ -102,7 +102,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 ### Known Parser Gaps
 
 - Preset name from full preset data still returns `Unknown`; use `preset current` for the current preset name.
-- Raw model IDs are not yet mapped to human-readable names such as compressors, drives, amps, delays, reverbs, etc.
+- Known model IDs are mapped through the `helix_usb` module catalog, including categories like Amp, Cab, Dynamic, Delay, Modulation, etc.
 - Parameters are unlabeled numeric arrays; there is no mapping yet to parameter names, units, ranges, or display values.
 - Some parsed numeric values likely need semantic decoding/scaling.
 - `preset get --id` currently reads current preset data, not arbitrary preset data by ID.
@@ -120,6 +120,8 @@ swift run helixcli preset current --timeout 500
 swift run helixcli preset switch 1
 swift run helixcli preset switch 0
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
+swift run helixcli block list --timeout 500 --max-packets 120
+swift run helixcli block get A3 --timeout 500 --max-packets 120
 ```
 
 Representative verified behavior:
@@ -129,6 +131,8 @@ Representative verified behavior:
 - Switching back to preset `0` restored `GospelTone CLN`.
 - `preset list` decoded all 125 preset names.
 - `preset get --id 0` returned 16 blocks and parsed parameter values.
+- `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
+- `block get A3` returned the current amp block as `US Double Nrm (mono)`.
 
 ## Latency / Benchmarking
 
@@ -147,7 +151,7 @@ Current quick read:
 1. Clarify `preset get --id` semantics:
    - Either implement true arbitrary preset reads by ID, or
    - Rename/scope it to something like `preset get-current` until arbitrary reads are known.
-2. Map model IDs to human-readable model names.
+2. Expand/verify model ID mapping edge cases beyond the imported `helix_usb` catalog.
 3. Map parameter positions to names, units, display ranges, and actual HX Stomp values.
 4. Extract preset name from full preset data, or combine `preset current` with `preset get` when reading current preset.
 

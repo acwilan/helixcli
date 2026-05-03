@@ -12,12 +12,13 @@ Currently verified:
 - Reading the current preset name
 - Switching presets
 - Capturing and partially parsing current-preset block/parameter data
+- Read-only `block list` and `block get <slot>` inspection with model/category names
 
 Not yet implemented:
 - Snapshot list/switch against hardware
 - Block toggle/write operations
 - Block parameter writes
-- Human-readable model/parameter mappings
+- Human-readable parameter mappings
 - Tuner data
 
 See `docs/STATUS.md` for the detailed status matrix.
@@ -62,19 +63,19 @@ helixcli snapshot switch <ID>
 
 ### Effect Block Control
 
-These commands are currently stubs and should not be used as if they apply changes yet:
+Read-only inspection works against the current preset:
 
 ```bash
-helixcli block list
-helixcli block toggle <SLOT>
-helixcli block param <SLOT> <PARAM> <VALUE>
-helixcli block get <SLOT>
+helixcli block list --timeout 500 --max-packets 120
+helixcli block list --include-empty --timeout 500 --max-packets 120
+helixcli block get <SLOT> --timeout 500 --max-packets 120
 ```
 
-For read-only inspection, use:
+Write commands are currently stubs and should not be used as if they apply changes yet:
 
 ```bash
-helixcli preset get --id 0 --timeout 500 --max-packets 120
+helixcli block toggle <SLOT>
+helixcli block param <SLOT> <PARAM> <VALUE>
 ```
 
 ## Agent Workflow
@@ -141,7 +142,7 @@ Error format:
 ## Tips for Agents
 
 1. **Always check current state first** - Don't assume what's loaded
-2. **Treat parsed block data as experimental** - Model IDs and parameter arrays are not fully mapped yet
+2. **Treat parsed block data as experimental** - Model names/categories are mapped, but parameter arrays are not fully mapped yet
 3. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
 4. **Make incremental suggestions** - Don't change everything at once
 5. **Explain changes** - Tell the user what you're adjusting and why

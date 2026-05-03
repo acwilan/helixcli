@@ -409,19 +409,31 @@ class PresetDataParser {
             }
         }
 
-        // Extract model ID - look for 82 05 pattern (module ID marker in Helix protocol)
-        // The pattern is: 82 13 [slot_num] 14 [model_id_hi] [model_id_lo] ...
-        for i in 0..<slotData.count - 4 {
-            if slotData[i] == 0x14 {
-                let modelIdHi = slotData[i + 1]
-                let modelIdLo = slotData[i + 2]
-                // Model IDs are typically in range 0x01-0x99
-                if modelIdHi >= 0x01 && modelIdHi <= 0x99 && modelIdLo <= 0x99 {
-                    let modelId = String(format: "%02x%02x", modelIdHi, modelIdLo)
-                    modelName = modelIdToName(modelId)
-                    params["modelId"] = modelId
-                    break
-                }
+        // Extract model IDs from Helix slot fields.
+        // Standard effect/amp blocks encode the primary module after marker 0x19
+        // and before marker 0x1a. Dual blocks can also include a second module
+        // after 0x1a and before 0x09. This matches helix_usb's SlotInfo parser
+        // (`amp_effect_slot_a` / `amp_effect_slot_b`).
+        let modelIds = extractModelIds(from: slotData)
+        if !modelIds.isEmpty {
+            params["modelIds"] = modelIds
+            if let first = modelIds.first {
+                params["modelId"] = first
+            }
+
+            let modelInfos = modelIds.map { id -> (id: String, info: HelixModelInfo?) in
+                (id, HelixModelCatalog.lookup(id))
+            }
+            let displayNames = modelInfos.map { item in
+                item.info?.name ?? "Unknown Model \(item.id)"
+            }
+            modelName = displayNames.joined(separator: " + ")
+
+            let categories = modelInfos.compactMap { $0.info?.category }
+            if !categories.isEmpty {
+                type = Array(Set(categories)).sorted().joined(separator: " + ")
+            } else {
+                type = "Unknown"
             }
         }
 
@@ -457,21 +469,36 @@ class PresetDataParser {
             }
         }
 
-        // Determine type based on slot position
-        if position.starts(with: "A") {
-            type = "Effect"
-        } else {
-            type = "Effect"
-        }
-
         return PresetBlock(slot: position, modelName: modelName, type: type, enabled: enabled, params: params)
     }
 
-    /// Convert model ID to name (simplified - would need full module mapping)
-    private func modelIdToName(_ id: String) -> String {
-        // This is a simplified mapping
-        // Full implementation would include all the modules from the Python reference
-        return "Model \(id)"
+    private func extractModelIds(from slotData: [UInt8]) -> [String] {
+        var ids: [String] = []
+        if let primary = bytesBetween(startMarker: 0x19, endMarker: 0x1a, in: slotData), !primary.isEmpty, primary != [0xff] {
+            ids.append(hex(primary))
+        }
+        if let secondary = bytesBetween(startMarker: 0x1a, endMarker: 0x09, in: slotData), !secondary.isEmpty, secondary != [0xff] {
+            ids.append(hex(secondary))
+        }
+        return ids
+    }
+
+    private func bytesBetween(startMarker: UInt8, endMarker: UInt8, in bytes: [UInt8]) -> [UInt8]? {
+        guard let start = bytes.firstIndex(of: startMarker) else { return nil }
+        var cursor = start + 1
+        var result: [UInt8] = []
+        while cursor < bytes.count {
+            if bytes[cursor] == endMarker {
+                return result
+            }
+            result.append(bytes[cursor])
+            cursor += 1
+        }
+        return nil
+    }
+
+    private func hex(_ bytes: [UInt8]) -> String {
+        bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Find pattern in byte array

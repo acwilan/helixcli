@@ -11,9 +11,10 @@ Core preset control is working against real HX Stomp hardware:
 - preset list/current read
 - preset switching via USB MIDI
 - current-preset raw data capture
-- initial block/parameter parsing
+- current-preset block parsing with human-readable model/category names
+- read-only block list/get commands
 
-Still missing: human-readable model/parameter mappings, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
+Still missing: parameter-name mappings, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
 
 See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes.
 
@@ -69,10 +70,19 @@ helixcli snapshot switch 2
 
 ### Block Control
 
-Block commands exist but are currently stubs. For now, use `preset get` to inspect initial parsed block data from the current preset:
+Read-only block inspection works for the current preset:
 
 ```bash
-helixcli preset get --id 0 --timeout 500 --max-packets 120
+helixcli block list --timeout 500 --max-packets 120
+helixcli block list --include-empty --timeout 500 --max-packets 120
+helixcli block get A3 --timeout 500 --max-packets 120
+```
+
+Write operations are still stubs and do not send changes yet:
+
+```bash
+helixcli block toggle A3
+helixcli block param A3 drive 0.7
 ```
 
 ## OpenClaw Integration
