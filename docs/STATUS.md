@@ -1,6 +1,6 @@
 # helixcli Status
 
-Last verified: 2026-05-02 against Andres's Line 6 HX Stomp (`0x0E41:0x4246`, serial `3428080`).
+Last verified: 2026-05-02 against a Line 6 HX Stomp (`0x0E41:0x4246`).
 
 ## Summary
 
@@ -26,7 +26,7 @@ Observed device:
 | Device | HX Stomp |
 | Vendor ID | `0x0E41` / Line 6 |
 | Product ID | `0x4246` |
-| Serial | `3428080` |
+| Serial | (redacted) |
 
 Confirmed endpoints:
 

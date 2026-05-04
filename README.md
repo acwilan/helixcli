@@ -14,7 +14,7 @@ This project would not exist without [`helix_usb`](https://github.com/kempline/h
 - model/module ID catalogs
 - latency comparison against a long-running Python USB session
 
-`helixcli` is not a drop-in replacement yet. It currently focuses on native macOS CLI usage, read/control operations that are verified on Andres's HX Stomp, and OpenClaw-friendly JSON output. When behavior differs from `helix_usb`, the local docs call that out explicitly.
+`helixcli` is not a drop-in replacement yet. It currently focuses on native macOS CLI usage, read/control operations verified on a HX Stomp, and OpenClaw-friendly JSON output. When behavior differs from `helix_usb`, the local docs call that out explicitly.
 
 ## Current Status
 
