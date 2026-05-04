@@ -10,6 +10,7 @@ struct PresetCommand: ParsableCommand {
             CurrentPreset.self,
             SwitchPreset.self,
             GetCurrentPreset.self,
+            BackupCurrentPreset.self,
             GetPreset.self,
             ParsePresetFixture.self,
         ]
@@ -244,6 +245,139 @@ struct GetCurrentPreset: ParsableCommand {
             print(JSONResponse.deviceNotFound().toJSON())
         } catch USBError.transferFailed(let message), USBError.connectionFailed(let message), USBError.invalidResponse(let message) {
             print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        }
+    }
+}
+
+
+private enum PresetBackupSupport {
+    static let format = "helixcli-preset-backup"
+    static let formatVersion = 1
+
+    static func backupData(presetData: [String: Any], device: USBDeviceDescriptor?) -> [String: Any] {
+        var data: [String: Any] = [
+            "format": format,
+            "formatVersion": formatVersion,
+            "createdAt": ISO8601DateFormatter().string(from: Date()),
+            "tool": [
+                "name": "helixcli",
+                "version": "0.1.0",
+            ],
+            "source": "currentPreset",
+            "restoreStatus": "not-implemented",
+            "restoreWarning": "This file is a read-only backup artifact. helixcli restore is intentionally not implemented yet.",
+            "preset": presetData,
+        ]
+
+        if let device {
+            data["device"] = device.dictionary
+        }
+
+        return data
+    }
+
+    static func defaultOutputPath(for presetName: String?) -> String {
+        let name = sanitizeFilenameComponent(presetName ?? "current-preset")
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let timestamp = formatter.string(from: Date())
+        return "backups/\(timestamp)-\(name).helixbackup.json"
+    }
+
+    static func writeJSON(_ object: [String: Any], to path: String) throws -> (path: String, byteCount: Int) {
+        let expandedPath = (path as NSString).expandingTildeInPath
+        let url: URL
+        if expandedPath.hasPrefix("/") {
+            url = URL(fileURLWithPath: expandedPath)
+        } else {
+            url = URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(expandedPath)
+        }
+
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let sanitized = sanitizeJSONValue(object)
+        let jsonData = try JSONSerialization.data(withJSONObject: sanitized, options: [.prettyPrinted, .sortedKeys])
+        try jsonData.write(to: url, options: [.atomic])
+        return (url.path, jsonData.count)
+    }
+
+    private static func sanitizeFilenameComponent(_ value: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let scalars = value.unicodeScalars.map { scalar in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let collapsed = String(scalars).replacingOccurrences(of: #"-+"#, with: "-", options: .regularExpression)
+        let trimmed = collapsed.trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        return trimmed.isEmpty ? "current-preset" : trimmed.lowercased()
+    }
+
+    private static func sanitizeJSONValue(_ value: Any) -> Any {
+        let mirror = Mirror(reflecting: value)
+        if mirror.displayStyle == .optional {
+            guard let child = mirror.children.first else { return NSNull() }
+            return sanitizeJSONValue(child.value)
+        }
+
+        if let dict = value as? [String: Any] {
+            return dict.mapValues { sanitizeJSONValue($0) }
+        }
+        if let array = value as? [Any] {
+            return array.map { sanitizeJSONValue($0) }
+        }
+        if value is NSNull || value is String || value is Int || value is Double || value is Bool {
+            return value
+        }
+        if let float = value as? Float {
+            return Double(float)
+        }
+        return String(describing: value)
+    }
+}
+
+struct BackupCurrentPreset: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "backup-current",
+        abstract: "Backup the currently loaded preset to a local JSON file"
+    )
+
+    @Option(help: "Output backup file path. Defaults to backups/<timestamp>-<preset-name>.helixbackup.json")
+    var output: String?
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets to read")
+    var maxPackets: Int = 200
+
+    @Flag(help: "Skip separate current-name request; faster but backup name may be Unknown")
+    var skipName = false
+
+    func run() throws {
+        do {
+            let presetData = try CurrentPresetDataReader.read(timeout: timeout, maxPackets: maxPackets, verbose: true, requestedPresetId: nil, includeName: !skipName)
+            let device = try? USBManager().findSupportedDevice()
+            let backupData = PresetBackupSupport.backupData(presetData: presetData, device: device ?? nil)
+            let presetName = presetData["name"] as? String
+            let targetPath = output ?? PresetBackupSupport.defaultOutputPath(for: presetName)
+            let written = try PresetBackupSupport.writeJSON(backupData, to: targetPath)
+
+            print(JSONResponse.success(data: [
+                "path": written.path,
+                "byteCount": written.byteCount,
+                "format": PresetBackupSupport.format,
+                "formatVersion": PresetBackupSupport.formatVersion,
+                "source": "currentPreset",
+                "presetName": presetName as Any,
+                "blockCount": presetData["blockCount"] as Any,
+                "snapshotCount": (presetData["snapshots"] as? [[String: Any]])?.count as Any,
+                "restoreStatus": "not-implemented",
+            ]).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.transferFailed(let message), USBError.connectionFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        } catch {
+            print(JSONResponse.failure(code: "BACKUP_ERROR", message: error.localizedDescription).toJSON())
         }
     }
 }

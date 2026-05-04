@@ -64,6 +64,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 | `helixcli preset current` | Working | Reads current preset name, e.g. `GospelTone CLN`. |
 | `helixcli preset switch <id>` | Working | Uses USB-MIDI Program Change on interface 4. Valid IDs currently 0-125. |
 | `helixcli preset get-current` | Working | Captures and parses the currently loaded preset data; also attempts a separate current-name request and returns `nameSource`. Use `--skip-name` for the faster payload-only path. |
+| `helixcli preset backup-current` | Working read-only | Writes a local `.helixbackup.json` backup for the currently loaded preset. Includes raw payload hex, parsed preset details, snapshots, blocks, timestamp, and device metadata when available. Restore/import is intentionally not implemented yet. |
 | `helixcli preset get --id <id>` | Deprecated alias | Reads current preset only and returns a warning; arbitrary preset reads by ID are not implemented yet. |
 | `helixcli preset parse-fixture <path>` | Working offline diagnostic | Parses a raw preset payload hex fixture without USB access; useful for parser regression checks. |
 
@@ -126,6 +127,7 @@ swift run helixcli preset switch 1
 swift run helixcli preset switch 0
 swift run helixcli preset get-current --timeout 500 --max-packets 120
 swift run helixcli preset get-current --skip-name --timeout 500 --max-packets 120
+swift run helixcli preset backup-current --timeout 500 --max-packets 120
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
 swift run helixcli snapshot list --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
@@ -144,6 +146,7 @@ Representative verified behavior:
 - Switching back to preset `0` restored `GospelTone CLN`.
 - `preset list` decoded all 125 preset names.
 - `preset get-current` returned the current preset name (`GospelTone CLN`) plus 16 blocks and parsed parameter values.
+- `preset backup-current` wrote a valid local JSON backup containing `GospelTone CLN`, raw payload hex, 16 blocks, and 3 snapshots.
 - `preset get --id 0` returned a deprecated/current-preset warning instead of implying arbitrary preset reads.
 - `snapshot list` returned 3 snapshots (`SNAPSHOT 1`, `SNAPSHOT 2`, `SNAPSHOT 3`) with snapshot 1 marked current.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
@@ -164,27 +167,28 @@ Current quick read:
 
 ### Highest Priority
 
-1. Implement true arbitrary preset reads by ID when the protocol is known.
-2. Expand/verify model ID mapping edge cases beyond the imported `helix_usb` catalog.
-3. Validate first-pass parameter-name mappings and replace conservative display scaling with exact HX Stomp display values where possible.
-4. Extract preset name directly from full preset payload data so `get-current --skip-name` and fixtures can avoid `Unknown`.
+1. Implement restore/import only after a safe write protocol, dry-run validation, compatibility checks, and read-after-write verification are designed.
+2. Implement true arbitrary preset reads by ID when the protocol is known.
+3. Expand/verify model ID mapping edge cases beyond the imported `helix_usb` catalog.
+4. Validate first-pass parameter-name mappings and replace conservative display scaling with exact HX Stomp display values where possible.
+5. Extract preset name directly from full preset payload data so `get-current --skip-name` and fixtures can avoid `Unknown`.
 
 ### Protocol / Feature Work
 
-5. Implement snapshot switch against real hardware.
-6. Continue improving block list/get parser quality.
-7. Implement block toggle/write operations safely.
-8. Implement block parameter writes safely, with confirmation-oriented UX for OpenClaw use.
-9. Investigate tuner data protocol.
+6. Implement snapshot switch against real hardware.
+7. Continue improving block list/get parser quality.
+8. Implement block toggle/write operations safely.
+9. Implement block parameter writes safely, with confirmation-oriented UX for OpenClaw use.
+10. Investigate tuner data protocol.
 
 ### Productization
 
-10. Keep expanding fixture regression coverage with more captured preset payloads and exact expected values, especially snapshots, IRs, EQ, modulation, and edge-case routing.
-11. Add integration-test notes that require attached hardware.
-12. Add GitHub Actions CI.
-13. Finalize Homebrew tap/release workflow.
-14. Improve error messages around interface access conflicts.
-15. Decide whether diagnostic commands should remain public, hidden, or marked experimental.
+11. Keep expanding fixture regression coverage with more captured preset payloads and exact expected values, especially snapshots, IRs, EQ, modulation, and edge-case routing.
+12. Add integration-test notes that require attached hardware.
+13. Add GitHub Actions CI.
+14. Finalize Homebrew tap/release workflow.
+15. Improve error messages around interface access conflicts.
+16. Decide whether diagnostic commands should remain public, hidden, or marked experimental.
 
 ## Useful Notes for Future Development
 

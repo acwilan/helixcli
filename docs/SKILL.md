@@ -13,9 +13,11 @@ Currently verified:
 - Switching presets
 - Capturing and partially parsing current-preset block/parameter data
 - Read-only `block list` and `block get <slot>` inspection with model/category names and first-pass `namedValues` parameter labels
+- Backing up the currently loaded preset to a local JSON file
 
 Not yet implemented:
-- Snapshot list/switch against hardware
+- Restore/import from backup files
+- Snapshot switch against hardware
 - Block toggle/write operations
 - Block parameter writes
 - Fully verified human-readable parameter mappings, units, ranges, and display scaling
@@ -52,6 +54,10 @@ helixcli preset get-current --timeout 500 --max-packets 120
 
 # Faster current preset details without the separate current-name request
 helixcli preset get-current --skip-name --timeout 500 --max-packets 120
+
+# Backup currently loaded preset to local JSON. Restore is not implemented yet.
+helixcli preset backup-current --timeout 500 --max-packets 120
+helixcli preset backup-current --output backups/current.helixbackup.json
 
 # Deprecated compatibility alias: --id is informational; this reads current preset data.
 helixcli preset get --id <ID> --timeout 500 --max-packets 120
@@ -154,17 +160,19 @@ Error format:
 1. **Always check current state first** - Don't assume what's loaded
 2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` includes `displayValue`, but labels/units/scaling are conservative and not fully verified yet
 3. **Use fixtures for parser work** - Run `scripts/verify_fixtures.py` after parser/catalog changes
-4. **Do not claim block/snapshot writes are available yet** - Those commands are stubs
-5. **Make incremental suggestions** - Don't change everything at once
-6. **Explain changes** - Tell the user what you're adjusting and why
-7. **Confirm before applying** - Especially for live performance scenarios
-8. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
+4. **Backup before risky experiments** - `preset backup-current` is safe/read-only and captures raw payload hex plus parsed state
+5. **Do not claim restore/block/snapshot writes are available yet** - Restore is not implemented and write commands are stubs
+6. **Make incremental suggestions** - Don't change everything at once
+7. **Explain changes** - Tell the user what you're adjusting and why
+8. **Confirm before applying** - Especially for live performance scenarios
+9. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
 
 ## Safety
 
 - Preset switching is working and immediate - warn user if audio is audible
 - Avoid routine `helixcli device reset`; live testing showed it can require a power-cycle
 - Avoid repeated `helixcli device ping` in one powered-on session; use higher-level commands instead
+- Restore/import is not implemented yet; backup files are read-only artifacts for now
 - Block/snapshot/parameter writes are not implemented yet
 
 ## Examples
@@ -174,6 +182,7 @@ Error format:
 ```bash
 helixcli preset current --timeout 500
 helixcli preset get-current --timeout 500 --max-packets 120
+helixcli preset backup-current --timeout 500 --max-packets 120
 ```
 
 ### Switch Presets

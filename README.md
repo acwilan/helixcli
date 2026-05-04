@@ -28,8 +28,9 @@ Core preset control is working against real HX Stomp hardware:
 - current-preset block parsing with human-readable model/category names
 - read-only block list/get commands
 - first-pass parameter labels and conservative display values for common/current-preset models
+- current-preset backup export to local JSON files
 
-Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
+Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, restore/import, block writes, snapshot switching, tuner support, tests, and release automation.
 
 See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes. Parser regression fixtures live in [`docs/fixtures/`](docs/fixtures/) and currently cover four preset payloads: clean/dual-cab, distortion, amp+cab/delay/reverb, and focused drive/reverb cases. Check them with `scripts/verify_fixtures.py`.
 
@@ -75,6 +76,10 @@ helixcli preset get-current
 
 # Faster detail read without the separate current-name request
 helixcli preset get-current --skip-name
+
+# Backup the currently loaded preset to a local JSON file
+helixcli preset backup-current --timeout 500 --max-packets 120
+helixcli preset backup-current --output backups/gospeltone.helixbackup.json
 
 # Deprecated compatibility alias; reads current preset only, --id is informational
 helixcli preset get --id 5
