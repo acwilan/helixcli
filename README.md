@@ -31,7 +31,7 @@ Core preset control is working against real HX Stomp hardware:
 
 Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, block writes, snapshot support, tuner support, tests, and release automation.
 
-See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes. Parser regression fixtures live in [`docs/fixtures/`](docs/fixtures/) and can be checked with `scripts/verify_fixtures.py`.
+See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes. Parser regression fixtures live in [`docs/fixtures/`](docs/fixtures/) and currently cover four preset payloads: clean/dual-cab, distortion, amp+cab/delay/reverb, and focused drive/reverb cases. Check them with `scripts/verify_fixtures.py`.
 
 ## Installation
 

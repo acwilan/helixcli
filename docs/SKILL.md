@@ -56,8 +56,10 @@ helixcli preset get-current --skip-name --timeout 500 --max-packets 120
 # Deprecated compatibility alias: --id is informational; this reads current preset data.
 helixcli preset get --id <ID> --timeout 500 --max-packets 120
 
-# Parse a captured preset payload fixture without connecting to USB
+# Parse captured preset payload fixtures without connecting to USB
 helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
+helixcli preset parse-fixture docs/fixtures/preset-001-full-dist.hex
+scripts/verify_fixtures.py
 ```
 
 ### Snapshot Management

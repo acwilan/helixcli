@@ -130,6 +130,9 @@ swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
 swift run helixcli block get A3 --timeout 500 --max-packets 120
 swift run helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
+swift run helixcli preset parse-fixture docs/fixtures/preset-001-full-dist.hex
+swift run helixcli preset parse-fixture docs/fixtures/preset-002-preset-002.hex
+swift run helixcli preset parse-fixture docs/fixtures/preset-003-preset-003.hex
 scripts/verify_fixtures.py
 ```
 
@@ -143,6 +146,7 @@ Representative verified behavior:
 - `preset get --id 0` returned a deprecated/current-preset warning instead of implying arbitrary preset reads.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
 - `block get A3` returned the current amp block as `US Double Nrm (mono)` with named/display parameters including `Drive` = `3.8`, `Bass` = `4.4`, `Mid` = `5.2`, `Treble` = `5.0`, `Presence` = `5.0`, `Ch Vol` = `5.0`, `Master` = `6.0`, and `Sag` = `5.0`.
+- Fixture verification now covers four captured payloads: `GospelTone CLN`, `Full Dist`, preset 002 (`Compulsive Drive`), and preset 003 (`Ping Pong`).
 
 ## Latency / Benchmarking
 
@@ -173,7 +177,7 @@ Current quick read:
 
 ### Productization
 
-10. Expand fixture regression coverage with more captured preset payloads and exact expected values.
+10. Keep expanding fixture regression coverage with more captured preset payloads and exact expected values, especially snapshots, IRs, EQ, modulation, and edge-case routing.
 11. Add integration-test notes that require attached hardware.
 12. Add GitHub Actions CI.
 13. Finalize Homebrew tap/release workflow.
