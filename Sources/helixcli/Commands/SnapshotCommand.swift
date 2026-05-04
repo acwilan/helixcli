@@ -71,22 +71,63 @@ struct ListSnapshots: ParsableCommand {
 struct SwitchSnapshot: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "switch",
-        abstract: "Switch to a snapshot"
+        abstract: "Switch to a snapshot using USB-MIDI CC 69"
     )
-    
+
     @Argument(help: "Snapshot ID (1-3 for HX Stomp)")
     var snapshotId: Int
-    
+
+    @Option(help: "MIDI channel, 1-16")
+    var channel: Int = 1
+
+    @Option(help: "USB transfer/read timeout in milliseconds")
+    var timeout: UInt32 = 500
+
+    @Option(help: "Maximum inbound packets to read during verification")
+    var maxPackets: Int = 120
+
+    @Flag(help: "Skip read-back verification after sending the snapshot switch")
+    var noVerify = false
+
     func run() {
         guard snapshotId >= 1 && snapshotId <= 3 else {
             print(JSONResponse.failure(code: "INVALID_SNAPSHOT", message: "Snapshot ID must be between 1 and 3").toJSON())
             return
         }
-        
-        let response = JSONResponse.success(data: [
-            "message": "Switching to snapshot \(snapshotId) - not yet implemented",
-            "snapshotId": snapshotId
-        ])
-        print(response.toJSON())
+        guard channel >= 1 && channel <= 16 else {
+            print(JSONResponse.failure(code: "INVALID_CHANNEL", message: "MIDI channel must be between 1 and 16").toJSON())
+            return
+        }
+
+        do {
+            let ccNumber = 69
+            let ccValue = snapshotId - 1
+            let midiResult = try USBManager().sendMidiControlChange(ccNumber, value: ccValue, channel: channel - 1, timeoutMs: timeout)
+            var responseData: [String: Any] = [
+                "snapshotId": snapshotId,
+                "midi": midiResult,
+                "verificationSkipped": noVerify,
+            ]
+
+            if !noVerify {
+                Thread.sleep(forTimeInterval: 0.25)
+                let snapshotResult = try SnapshotReadSupport.readCurrentSnapshots(timeout: timeout, maxPackets: maxPackets)
+                responseData["currentSnapshot"] = snapshotResult.currentSnapshot
+                let verified = snapshotResult.currentSnapshot == snapshotId
+                responseData["verified"] = verified
+                if !verified {
+                    responseData["warning"] = "MIDI CC 69 was sent successfully, but read-back did not report the requested snapshot. Snapshot switching remains experimental on this device/configuration."
+                }
+                responseData["snapshots"] = SnapshotReadSupport.json(currentSnapshot: snapshotResult.currentSnapshot, snapshots: snapshotResult.snapshots)["snapshots"]
+            }
+
+            print(JSONResponse.success(data: responseData).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        } catch {
+            print(JSONResponse.failure(code: "UNKNOWN_ERROR", message: error.localizedDescription).toJSON())
+        }
     }
 }

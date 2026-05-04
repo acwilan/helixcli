@@ -73,7 +73,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 | Command | Status | Notes |
 |---|---|---|
 | `helixcli snapshot list` | Working read-only | Parses current preset payload and returns 3 snapshots with current flag. |
-| `helixcli snapshot switch <id>` | Stub | Validates 1-3 but does not send USB/MIDI command yet. |
+| `helixcli snapshot switch <id>` | Experimental | Sends USB-MIDI CC 69 with values 0-2 for snapshots 1-3 and can optionally read back. Live tests wrote 4 bytes successfully, but read-back still reported snapshot 1, so switching is not yet verified on this device/configuration. |
 
 ### Block Commands
 
@@ -130,6 +130,7 @@ swift run helixcli preset get-current --skip-name --timeout 500 --max-packets 12
 swift run helixcli preset backup-current --timeout 500 --max-packets 120
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
 swift run helixcli snapshot list --timeout 500 --max-packets 120
+swift run helixcli snapshot switch 2 --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
 swift run helixcli block get A3 --timeout 500 --max-packets 120
 swift run helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
@@ -149,6 +150,7 @@ Representative verified behavior:
 - `preset backup-current` wrote a valid local JSON backup containing `GospelTone CLN`, raw payload hex, 16 blocks, and 3 snapshots.
 - `preset get --id 0` returned a deprecated/current-preset warning instead of implying arbitrary preset reads.
 - `snapshot list` returned 3 snapshots (`SNAPSHOT 1`, `SNAPSHOT 2`, `SNAPSHOT 3`) with snapshot 1 marked current.
+- `snapshot switch 2` sent USB-MIDI CC 69 successfully (`0b b0 45 01`, 4 bytes written), but verification read-back still reported current snapshot 1. Tried channels 1-16 without a verified snapshot change.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
 - `block get A3` returned the current amp block as `US Double Nrm (mono)` with named/display parameters including `Drive` = `3.8`, `Bass` = `4.4`, `Mid` = `5.2`, `Treble` = `5.0`, `Presence` = `5.0`, `Ch Vol` = `5.0`, `Master` = `6.0`, and `Sag` = `5.0`.
 - Fixture verification now covers four captured payloads: `GospelTone CLN`, `Full Dist`, preset 002 (`Compulsive Drive`), and preset 003 (`Ping Pong`).
@@ -175,7 +177,7 @@ Current quick read:
 
 ### Protocol / Feature Work
 
-6. Implement snapshot switch against real hardware.
+6. Investigate why USB-MIDI CC 69 snapshot switching is not reflected in read-back; verify whether this is MIDI/global-settings related, parser/read-back semantics, or a different required protocol.
 7. Continue improving block list/get parser quality.
 8. Implement block toggle/write operations safely.
 9. Implement block parameter writes safely, with confirmation-oriented UX for OpenClaw use.
@@ -196,14 +198,9 @@ Current quick read:
 - Avoid repeated `device ping` calls in the same powered-on device session; it can leave the Stomp waiting for a later handshake phase.
 - Avoid routine USB reset.
 - `preset switch` is currently safer through USB MIDI than through the proprietary protocol.
+- `snapshot switch` currently only proves that CC 69 packets are sent; do not mark it fully working until read-back or physical verification confirms the active snapshot changes.
 - `preset-data` is the best command for capturing fixtures for parser development.
 
-## Current Git State at Documentation Time
+## Current Git State Notes
 
-Recent functional commit:
-
-```text
-2ace548 fix: improve preset data parsing
-```
-
-Documentation should be updated whenever new parser mappings or write operations are verified against hardware.
+Use `git log --oneline -5` for the latest commits. Documentation should be updated whenever new parser mappings, backups, control commands, or write operations are verified against hardware.

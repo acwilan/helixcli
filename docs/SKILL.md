@@ -14,10 +14,11 @@ Currently verified:
 - Capturing and partially parsing current-preset block/parameter data
 - Read-only `block list` and `block get <slot>` inspection with model/category names and first-pass `namedValues` parameter labels
 - Backing up the currently loaded preset to a local JSON file
+- Experimental snapshot switch command that sends USB-MIDI CC 69
 
 Not yet implemented:
 - Restore/import from backup files
-- Snapshot switch against hardware
+- Fully verified snapshot switching/readback
 - Block toggle/write operations
 - Block parameter writes
 - Fully verified human-readable parameter mappings, units, ranges, and display scaling
@@ -70,11 +71,12 @@ scripts/verify_fixtures.py
 
 ### Snapshot Management
 
-Snapshot listing works read-only. Snapshot switching is still a stub and should not be relied on for live control yet:
+Snapshot listing works read-only. Snapshot switching sends USB-MIDI CC 69 but is still experimental: live read-back did not confirm the active snapshot change yet.
 
 ```bash
 helixcli snapshot list --timeout 500 --max-packets 120
-helixcli snapshot switch <ID>
+helixcli snapshot switch <ID> --timeout 500 --max-packets 120
+helixcli snapshot switch <ID> --no-verify
 ```
 
 ### Effect Block Control
@@ -161,11 +163,12 @@ Error format:
 2. **Treat parsed block data as experimental** - Model names/categories are mapped and `namedValues` includes `displayValue`, but labels/units/scaling are conservative and not fully verified yet
 3. **Use fixtures for parser work** - Run `scripts/verify_fixtures.py` after parser/catalog changes
 4. **Backup before risky experiments** - `preset backup-current` is safe/read-only and captures raw payload hex plus parsed state
-5. **Do not claim restore/block/snapshot writes are available yet** - Restore is not implemented and write commands are stubs
-6. **Make incremental suggestions** - Don't change everything at once
-7. **Explain changes** - Tell the user what you're adjusting and why
-8. **Confirm before applying** - Especially for live performance scenarios
-9. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
+5. **Do not claim restore/block writes are available yet** - Restore is not implemented and block write commands are stubs
+6. **Treat snapshot switch as experimental** - It sends CC 69, but live read-back has not verified an active snapshot change yet
+7. **Make incremental suggestions** - Don't change everything at once
+8. **Explain changes** - Tell the user what you're adjusting and why
+9. **Confirm before applying** - Especially for live performance scenarios
+10. **Handle errors gracefully** - Device might not be connected or the USB interface may be busy
 
 ## Safety
 
@@ -173,7 +176,8 @@ Error format:
 - Avoid routine `helixcli device reset`; live testing showed it can require a power-cycle
 - Avoid repeated `helixcli device ping` in one powered-on session; use higher-level commands instead
 - Restore/import is not implemented yet; backup files are read-only artifacts for now
-- Block/snapshot/parameter writes are not implemented yet
+- Snapshot switching is experimental until read-back or physical verification confirms active snapshot changes
+- Block/parameter writes are not implemented yet
 
 ## Examples
 

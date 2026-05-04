@@ -29,8 +29,9 @@ Core preset control is working against real HX Stomp hardware:
 - read-only block list/get commands
 - first-pass parameter labels and conservative display values for common/current-preset models
 - current-preset backup export to local JSON files
+- experimental snapshot switch command that sends USB-MIDI CC 69
 
-Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, restore/import, block writes, snapshot switching, tuner support, tests, and release automation.
+Still missing: exact HX Edit-style parameter units/display scaling, full parameter-name coverage, true arbitrary preset reads by ID, restore/import, block writes, fully verified snapshot switching/readback, tuner support, tests, and release automation.
 
 See [`docs/STATUS.md`](docs/STATUS.md) for the detailed capability/gap matrix and [`docs/LATENCY.md`](docs/LATENCY.md) for preliminary latency notes. Parser regression fixtures live in [`docs/fixtures/`](docs/fixtures/) and currently cover four preset payloads: clean/dual-cab, distortion, amp+cab/delay/reverb, and focused drive/reverb cases. Check them with `scripts/verify_fixtures.py`.
 
@@ -90,11 +91,12 @@ helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
 
 ### Snapshot Management
 
-Snapshot listing works read-only for the current preset. Switching remains a stub and does not send changes yet:
+Snapshot listing works read-only for the current preset. Snapshot switching now sends the standard USB-MIDI CC 69 message, but live read-back has not confirmed the active snapshot change yet, so treat it as experimental:
 
 ```bash
 helixcli snapshot list --timeout 500 --max-packets 120
-helixcli snapshot switch 2
+helixcli snapshot switch 2 --timeout 500 --max-packets 120
+helixcli snapshot switch 2 --no-verify
 ```
 
 ### Block Control
