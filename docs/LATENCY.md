@@ -18,7 +18,7 @@ Recommended invocation:
 
 ```bash
 swift build -c release
-/Users/andres/dev/helix_usb/.venv/bin/python scripts/benchmark_latency.py --runs 3
+/path/to/helix_usb/.venv/bin/python scripts/benchmark_latency.py --runs 3
 ```
 
 The script currently benchmarks:
@@ -56,7 +56,7 @@ This suggests the current per-command connect/handshake lifecycle is not consist
 Setup completed:
 
 ```bash
-cd /Users/andres/dev/helix_usb
+cd /path/to/helix_usb
 python3 -m venv .venv
 .venv/bin/pip install pyusb pexpect xlsxwriter
 ```

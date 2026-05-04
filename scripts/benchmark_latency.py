@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import os
 import subprocess
 import sys
 import time
@@ -28,7 +29,7 @@ except ImportError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[1]
 HELIXCLI = ROOT / ".build" / "release" / "helixcli"
-HELIX_USB = Path("/Users/andres/dev/helix_usb")
+HELIX_USB = Path(os.environ.get("HELIX_USB_PATH", "/path/to/helix_usb"))
 HELIX_USB_PYTHON = HELIX_USB / ".venv" / "bin" / "python"
 HELIX_USB_SCRIPT = HELIX_USB / "helix_usb.py"
 
