@@ -85,10 +85,10 @@ helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
 
 ### Snapshot Management
 
-Snapshot commands exist but are currently stubs:
+Snapshot listing works read-only for the current preset. Switching remains a stub and does not send changes yet:
 
 ```bash
-helixcli snapshot list
+helixcli snapshot list --timeout 500 --max-packets 120
 helixcli snapshot switch 2
 ```
 

@@ -123,6 +123,13 @@ private enum PresetResponseSupport {
             "name": resolvedName,
             "nameSource": nameSource,
             "currentSnapshot": presetInfo.currentSnapshot,
+            "snapshots": presetInfo.snapshots.map { snapshot in
+                [
+                    "id": snapshot.id,
+                    "name": snapshot.name,
+                    "isCurrent": snapshot.id == presetInfo.currentSnapshot,
+                ]
+            },
             "blockCount": presetInfo.blocks.count,
             "blocks": presetInfo.blocks.map { block in
                 [

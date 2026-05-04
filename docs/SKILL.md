@@ -64,10 +64,10 @@ scripts/verify_fixtures.py
 
 ### Snapshot Management
 
-These commands are currently stubs and should not be relied on for live control yet:
+Snapshot listing works read-only. Snapshot switching is still a stub and should not be relied on for live control yet:
 
 ```bash
-helixcli snapshot list
+helixcli snapshot list --timeout 500 --max-packets 120
 helixcli snapshot switch <ID>
 ```
 

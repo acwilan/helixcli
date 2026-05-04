@@ -39,7 +39,16 @@ def parse_fixture(name: str) -> dict[str, Any]:
     require(data["source"] == "currentPreset", f"{name}: unexpected source: {data.get('source')}")
     require(data["nameSource"] == "preset-payload-parser", f"{name}: unexpected name source: {data.get('nameSource')}")
     require(data["requestedPresetId"] is None, f"{name}: unexpected requested preset id: {data.get('requestedPresetId')}")
+    verify_default_snapshots(name, data)
     return data
+
+
+def verify_default_snapshots(name: str, data: dict[str, Any]) -> None:
+    snapshots = data["snapshots"]
+    require(len(snapshots) == 3, f"{name}: expected 3 snapshots, got {len(snapshots)}")
+    require([s["id"] for s in snapshots] == [1, 2, 3], f"{name}: unexpected snapshot ids: {snapshots}")
+    require([s["name"] for s in snapshots] == ["SNAPSHOT 1", "SNAPSHOT 2", "SNAPSHOT 3"], f"{name}: unexpected snapshot names: {snapshots}")
+    require(snapshots[0]["isCurrent"] is True, f"{name}: expected snapshot 1 current: {snapshots}")
 
 
 def by_slot(data: dict[str, Any]) -> dict[str, dict[str, Any]]:

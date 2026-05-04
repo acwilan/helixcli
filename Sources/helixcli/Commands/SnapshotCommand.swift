@@ -12,18 +12,59 @@ struct SnapshotCommand: ParsableCommand {
     )
 }
 
+private enum SnapshotReadSupport {
+    static func readCurrentSnapshots(timeout: UInt32, maxPackets: Int) throws -> (currentSnapshot: Int, snapshots: [PresetSnapshot]) {
+        let result = try USBManager().requestPresetData(timeoutMs: timeout, maxPackets: maxPackets, verbose: false)
+
+        guard let connected = result["connected"] as? Bool, connected else {
+            throw USBError.connectionFailed("Failed to connect to HX Stomp")
+        }
+
+        guard let payloadHex = result["payloadHex"] as? String, !payloadHex.isEmpty else {
+            throw USBError.invalidResponse("No preset data received from device")
+        }
+
+        let presetInfo = PresetDataParser(hexString: payloadHex).parse()
+        return (presetInfo.currentSnapshot, presetInfo.snapshots)
+    }
+
+    static func json(currentSnapshot: Int, snapshots: [PresetSnapshot]) -> [String: Any] {
+        [
+            "currentSnapshot": currentSnapshot,
+            "snapshots": snapshots.map { snapshot in
+                [
+                    "id": snapshot.id,
+                    "name": snapshot.name,
+                    "isCurrent": snapshot.id == currentSnapshot,
+                ]
+            },
+        ]
+    }
+}
+
 struct ListSnapshots: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "list",
         abstract: "List snapshots for current preset"
     )
+
+    @Option(help: "USB read/write timeout in milliseconds")
+    var timeout: UInt32 = 250
+
+    @Option(help: "Maximum inbound packets to read")
+    var maxPackets: Int = 200
     
     func run() {
-        let response = JSONResponse.success(data: [
-            "message": "Listing snapshots - not yet implemented",
-            "snapshots": []
-        ])
-        print(response.toJSON())
+        do {
+            let result = try SnapshotReadSupport.readCurrentSnapshots(timeout: timeout, maxPackets: maxPackets)
+            print(JSONResponse.success(data: SnapshotReadSupport.json(currentSnapshot: result.currentSnapshot, snapshots: result.snapshots)).toJSON())
+        } catch USBError.deviceNotFound {
+            print(JSONResponse.deviceNotFound().toJSON())
+        } catch USBError.connectionFailed(let message), USBError.transferFailed(let message), USBError.invalidResponse(let message) {
+            print(JSONResponse.failure(code: "USB_ERROR", message: message).toJSON())
+        } catch {
+            print(JSONResponse.failure(code: "UNKNOWN_ERROR", message: error.localizedDescription).toJSON())
+        }
     }
 }
 

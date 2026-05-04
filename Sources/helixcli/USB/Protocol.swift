@@ -196,10 +196,17 @@ struct PresetBlock {
     let params: [String: Any]
 }
 
+/// Represents a parsed HX snapshot
+struct PresetSnapshot {
+    let id: Int
+    let name: String
+}
+
 /// Parsed preset information
 struct PresetInfo {
     let name: String
     let currentSnapshot: Int
+    let snapshots: [PresetSnapshot]
     let blocks: [PresetBlock]
 }
 
@@ -237,11 +244,13 @@ class PresetDataParser {
     func parse() -> PresetInfo {
         let name = extractPresetName()
         let currentSnapshot = extractCurrentSnapshot()
+        let snapshots = extractSnapshots()
         let blocks = extractBlocks()
 
         return PresetInfo(
             name: name,
             currentSnapshot: currentSnapshot,
+            snapshots: snapshots,
             blocks: blocks
         )
     }
@@ -306,6 +315,44 @@ class PresetDataParser {
         let firmwareOffset = firmwareString?.offset ?? 0
         let postFirmware = candidates.filter { $0.offset > firmwareOffset + 20 }
         return postFirmware.first?.value ?? "Unknown"
+    }
+
+    /// Extract snapshot names from the data.
+    ///
+    /// Snapshot sections are tagged with `04 ab`, followed by a null-terminated
+    /// ASCII label when the snapshot has an explicit/custom name. Factory/default
+    /// snapshot 1 is sometimes represented as `04 ab` immediately followed by
+    /// binary metadata, so we synthesize missing entries as `SNAPSHOT N`.
+    private func extractSnapshots() -> [PresetSnapshot] {
+        let marker: [UInt8] = [0x04, 0xab]
+        var namesByIndex: [Int: String] = [:]
+        var cursor = 0
+        var snapshotIndex = 1
+
+        while cursor < data.count, let markerIndex = find(marker, in: data, startingAt: cursor), snapshotIndex <= 3 {
+            let nameStart = markerIndex + marker.count
+            var name: String? = nil
+
+            if nameStart < data.count, data[nameStart] >= 32, data[nameStart] <= 126 {
+                var nameBytes: [UInt8] = []
+                var idx = nameStart
+                while idx < data.count, data[idx] != 0x00, data[idx] >= 32, data[idx] <= 126, nameBytes.count < 32 {
+                    nameBytes.append(data[idx])
+                    idx += 1
+                }
+                if !nameBytes.isEmpty {
+                    name = String(bytes: nameBytes, encoding: .ascii)
+                }
+            }
+
+            namesByIndex[snapshotIndex] = name ?? "SNAPSHOT \(snapshotIndex)"
+            snapshotIndex += 1
+            cursor = markerIndex + marker.count
+        }
+
+        return (1...3).map { id in
+            PresetSnapshot(id: id, name: namesByIndex[id] ?? "SNAPSHOT \(id)")
+        }
     }
 
     /// Extract current snapshot from the data

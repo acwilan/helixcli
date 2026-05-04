@@ -71,7 +71,7 @@ Important caution: avoid `libusb_reset_device` as a routine operation. In live t
 
 | Command | Status | Notes |
 |---|---|---|
-| `helixcli snapshot list` | Stub | Returns placeholder JSON only. |
+| `helixcli snapshot list` | Working read-only | Parses current preset payload and returns 3 snapshots with current flag. |
 | `helixcli snapshot switch <id>` | Stub | Validates 1-3 but does not send USB/MIDI command yet. |
 
 ### Block Commands
@@ -127,6 +127,7 @@ swift run helixcli preset switch 0
 swift run helixcli preset get-current --timeout 500 --max-packets 120
 swift run helixcli preset get-current --skip-name --timeout 500 --max-packets 120
 swift run helixcli preset get --id 0 --timeout 500 --max-packets 120
+swift run helixcli snapshot list --timeout 500 --max-packets 120
 swift run helixcli block list --timeout 500 --max-packets 120
 swift run helixcli block get A3 --timeout 500 --max-packets 120
 swift run helixcli preset parse-fixture docs/fixtures/current-preset-gospeltone.hex
@@ -144,6 +145,7 @@ Representative verified behavior:
 - `preset list` decoded all 125 preset names.
 - `preset get-current` returned the current preset name (`GospelTone CLN`) plus 16 blocks and parsed parameter values.
 - `preset get --id 0` returned a deprecated/current-preset warning instead of implying arbitrary preset reads.
+- `snapshot list` returned 3 snapshots (`SNAPSHOT 1`, `SNAPSHOT 2`, `SNAPSHOT 3`) with snapshot 1 marked current.
 - `block list` returned parsed non-empty blocks including `US Double Nrm`, `LA Studio Comp`, `Deluxe Phaser`, `Vintage Digital`, and a dual cab block.
 - `block get A3` returned the current amp block as `US Double Nrm (mono)` with named/display parameters including `Drive` = `3.8`, `Bass` = `4.4`, `Mid` = `5.2`, `Treble` = `5.0`, `Presence` = `5.0`, `Ch Vol` = `5.0`, `Master` = `6.0`, and `Sag` = `5.0`.
 - Fixture verification now covers four captured payloads: `GospelTone CLN`, `Full Dist`, preset 002 (`Compulsive Drive`), and preset 003 (`Ping Pong`).
@@ -169,8 +171,8 @@ Current quick read:
 
 ### Protocol / Feature Work
 
-5. Implement snapshot list/switch against real hardware.
-6. Implement block list/get as wrappers around the parser output.
+5. Implement snapshot switch against real hardware.
+6. Continue improving block list/get parser quality.
 7. Implement block toggle/write operations safely.
 8. Implement block parameter writes safely, with confirmation-oriented UX for OpenClaw use.
 9. Investigate tuner data protocol.
